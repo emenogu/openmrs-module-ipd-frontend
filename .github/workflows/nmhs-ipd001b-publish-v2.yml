@@ -1,0 +1,149 @@
+name: NMHS IPD-001B deterministic candidate publication v2
+
+on:
+  pull_request:
+    branches:
+      - ipd-001b-publication-base-v2
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'emenogu/openmrs-module-ipd-frontend' &&
+      github.event.pull_request.head.ref == 'ipd-001b-treatments-null-response-v1' &&
+      github.event.pull_request.head.sha == 'ece27565dd63936bd3d70e2bd33b6178dba9e776'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out exact authorized candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Verify exact authorized source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED='ece27565dd63936bd3d70e2bd33b6178dba9e776'
+          EVENT_HEAD='${{ github.event.pull_request.head.sha }}'
+          EVENT_REF='${{ github.event.pull_request.head.ref }}'
+          EVENT_REPO='${{ github.event.pull_request.head.repo.full_name }}'
+          ACTUAL="$(git rev-parse HEAD)"
+
+          test "$EVENT_HEAD" = "$EXPECTED"
+          test "$ACTUAL" = "$EXPECTED"
+          test "$EVENT_REF" = 'ipd-001b-treatments-null-response-v1'
+          test "$EVENT_REPO" = 'emenogu/openmrs-module-ipd-frontend'
+
+          printf 'AUTHORIZED_CANDIDATE=%s\n' "$ACTUAL"
+
+      - name: Set up Node 14
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14.x'
+          cache: yarn
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          yarn install --frozen-lockfile
+
+      - name: Build frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          yarn build
+
+      - name: Run configured CI tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          yarn test:ci
+
+      - name: Generate deterministic derivative Dockerfile
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > package/docker/Dockerfile.nmhs-ipd001b-v2 <<'EOF_DOCKERFILE'
+          FROM bahmni/microfrontend-ipd@sha256:3f7b73f485acab356dbc5fc18b48a85793b8b0a169fe444e834d274b97247a6c
+
+          RUN rm -rf /usr/local/apache2/htdocs/ipd/*
+          COPY dist/federation/. /usr/local/apache2/htdocs/ipd/
+          EOF_DOCKERFILE
+
+          ACTUAL="$(
+            sha256sum package/docker/Dockerfile.nmhs-ipd001b-v2 |
+            awk '{print $1}'
+          )"
+
+          EXPECTED='e09a26d7b12f465d10106c0faec10d8348a8a7c9aa8729ea751506271419b700'
+
+          test "$ACTUAL" = "$EXPECTED"
+
+          grep -Fxq             'FROM bahmni/microfrontend-ipd@sha256:3f7b73f485acab356dbc5fc18b48a85793b8b0a169fe444e834d274b97247a6c'             package/docker/Dockerfile.nmhs-ipd001b-v2
+
+          if grep -Eq             '(^|[[:space:]])apk([[:space:]]|$)|apt-get|yum|dnf'             package/docker/Dockerfile.nmhs-ipd001b-v2
+          then
+            printf '%s\n'               'FAIL: package-management operation found in derivative Dockerfile' >&2
+            exit 1
+          fi
+
+          printf 'DERIVATIVE_DOCKERFILE_SHA256=%s\n' "$ACTUAL"
+          printf '%s\n' 'RUNTIME_BASE_PINNED=true'
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish immutable-tagged derivative
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: package/docker/Dockerfile.nmhs-ipd001b-v2
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ghcr.io/emenogu/nmhs-ipd-frontend:candidate-v2-ece27565dd63936bd3d70e2bd33b6178dba9e776
+
+      - name: Verify publication output
+        shell: bash
+        env:
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          case "$PUBLISHED_DIGEST" in
+            sha256:[0-9a-f][0-9a-f]*)
+              ;;
+            *)
+              printf 'FAIL: invalid publication digest: %s\n'                 "$PUBLISHED_DIGEST" >&2
+              exit 1
+              ;;
+          esac
+
+          test "${#PUBLISHED_DIGEST}" -eq 71
+
+          printf 'PUBLISHED_IMAGE=ghcr.io/emenogu/nmhs-ipd-frontend:candidate-v2-ece27565dd63936bd3d70e2bd33b6178dba9e776\n'
+          printf 'PUBLISHED_DIGEST=%s\n' "$PUBLISHED_DIGEST"
