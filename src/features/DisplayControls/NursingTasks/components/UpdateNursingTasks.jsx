@@ -109,16 +109,16 @@ const UpdateNursingTasks = (props) => {
   };
 
   const handlePrimaryButtonClick = async () => {
-    const administeredTasks = createAdministeredTasksPayload();
+    const submittedTasks = createAdministeredTasksPayload();
     const response = isPRNMedication
-      ? await saveEmergencyMedication(administeredTasks[0])
-      : await saveAdministeredMedication(administeredTasks);
+      ? await saveEmergencyMedication(submittedTasks[0])
+      : await saveAdministeredMedication(submittedTasks);
     if (response.status === 200) {
-      Object.keys(tasks).forEach((key) => {
-        if (tasks[key].status === "not-done") {
+      submittedTasks.forEach((task) => {
+        if (task.status === "not-done") {
           handleAuditEvent("SKIP_SCHEDULED_MEDICATION_TASK");
         }
-        if (tasks[key].status === "completed") {
+        if (task.status === "completed") {
           handleAuditEvent("ADMINISTER_MEDICATION_TASK");
         }
       });
