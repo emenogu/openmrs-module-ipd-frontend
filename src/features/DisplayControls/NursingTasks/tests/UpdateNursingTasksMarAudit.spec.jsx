@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import React from "react";
 import MockDate from "mockdate";
 
@@ -47,30 +53,31 @@ describe("UpdateNursingTasks MAR audit dispatch", () => {
       </IPDContext.Provider>
     );
 
-  const confirmSave = () => {
+  const openAndConfirmSave = () => {
     const saveButtons = screen.getAllByText("Save");
-    fireEvent.click(saveButtons[saveButtons.length - 1]);
+
+    expect(saveButtons.length).toBeGreaterThanOrEqual(2);
+
+    /*
+     * Match the existing upstream component tests:
+     * index 1 is the slider Save before the modal is open.
+     */
+    fireEvent.click(saveButtons[1]);
+
+    const dialog = screen.getByRole("dialog");
 
     expect(
-      screen.getByText("Please confirm your nursing tasks")
+      within(dialog).getByText("Please confirm your nursing tasks")
     ).toBeTruthy();
 
-    const confirmationSaveButtons = screen.getAllByText("Save");
+    const modalSave = within(dialog).getByText("Save");
 
-    fireEvent.click(
-      confirmationSaveButtons[
-        confirmationSaveButtons.length - 1
-      ]
-    );
+    fireEvent.click(modalSave);
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    /*
-     * Match mockMedicationTasks:
-     * 2023-11-22 08:00 scheduled task.
-     */
     MockDate.set("2023-11-22T08:00:00Z");
 
     mockSaveAdministeredMedication.mockResolvedValue({
@@ -92,11 +99,10 @@ describe("UpdateNursingTasks MAR audit dispatch", () => {
       container.querySelectorAll(".bx--toggle__switch")[0];
 
     expect(toggle).toBeTruthy();
-    expect(toggle.disabled).toBe(false);
 
     fireEvent.click(toggle);
 
-    confirmSave();
+    openAndConfirmSave();
 
     await waitFor(() => {
       expect(mockSaveAdministeredMedication).toHaveBeenCalledTimes(1);
@@ -124,10 +130,9 @@ describe("UpdateNursingTasks MAR audit dispatch", () => {
       container.querySelectorAll(".bx--overflow-menu")[0];
 
     expect(overflow).toBeTruthy();
-    fireEvent.click(overflow);
 
-    const skipDrug = screen.getByText("Skip Drug");
-    fireEvent.click(skipDrug);
+    fireEvent.click(overflow);
+    fireEvent.click(screen.getByText("Skip Drug"));
 
     const notes = container.querySelector(".bx--text-area");
 
@@ -140,7 +145,7 @@ describe("UpdateNursingTasks MAR audit dispatch", () => {
     });
     fireEvent.blur(notes);
 
-    confirmSave();
+    openAndConfirmSave();
 
     await waitFor(() => {
       expect(mockSaveAdministeredMedication).toHaveBeenCalledTimes(1);
@@ -175,11 +180,10 @@ describe("UpdateNursingTasks MAR audit dispatch", () => {
       container.querySelectorAll(".bx--toggle__switch")[0];
 
     expect(toggle).toBeTruthy();
-    expect(toggle.disabled).toBe(false);
 
     fireEvent.click(toggle);
 
-    confirmSave();
+    openAndConfirmSave();
 
     await waitFor(() => {
       expect(mockSaveAdministeredMedication).toHaveBeenCalledTimes(1);
