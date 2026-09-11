@@ -1,0 +1,39 @@
+name: NMHS IPD-001B MAR Audit Validation
+
+on:
+  pull_request:
+    branches:
+      - ipd-001b-mar-audit-validation-base-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and test MAR audit candidate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 14.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Run dedicated MAR audit regression
+        run: |
+          TZ=UTC yarn jest \
+            src/features/DisplayControls/NursingTasks/tests/UpdateNursingTasksMarAudit.spec.jsx \
+            --runInBand
+
+      - name: Run existing CI test command
+        run: yarn test:ci
