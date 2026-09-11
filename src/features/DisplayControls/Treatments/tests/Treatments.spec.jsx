@@ -1135,3 +1135,110 @@ it("should render an Edit Drug Chart link disabled for IPD treatments read mode"
     expect(editDrugChartLink.className).toContain("bx--link--disabled");
   });
 });
+
+
+describe("Treatments medication loading and error states", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const renderTreatmentsWithMedications = (allMedications) =>
+    render(
+      <IPDContext.Provider value={{ config: mockConfig, isReadMode: false }}>
+        <SliderContext.Provider value={mockProviderValue}>
+          <AllMedicationsContext.Provider value={allMedications}>
+            <Treatments patientId="3ae1ee52-e9b2-4934-876d-30711c0e3e2f" />
+          </AllMedicationsContext.Provider>
+        </SliderContext.Provider>
+      </IPDContext.Provider>
+    );
+
+  it("should remain in loading state when medication data and error are null", async () => {
+    const loadingMedications = {
+      ...mockAllMedicationsProviderValue,
+      data: null,
+      error: null,
+    };
+
+    const { queryByText } = renderTreatmentsWithMedications(
+      loadingMedications
+    );
+
+    await waitFor(() => {
+      expect(loadingMedications.getAllDrugOrders).toHaveBeenCalled();
+    });
+
+    expect(
+      queryByText("User doesn't have required privilege(s)")
+    ).toBeFalsy();
+    expect(queryByText("Technical error")).toBeFalsy();
+    expect(
+      queryByText("No IPD Medication is prescribed for this patient yet")
+    ).toBeFalsy();
+  });
+
+  it("should render Treatments normally when medication data succeeds", async () => {
+    const successfulMedications = {
+      ...mockAllMedicationsProviderValue,
+      data: {
+        emergencyMedications: [],
+        ipdDrugOrders: [],
+      },
+      error: null,
+    };
+
+    const { getByText } = renderTreatmentsWithMedications(
+      successfulMedications
+    );
+
+    await waitFor(() => {
+      expect(
+        getByText("No IPD Medication is prescribed for this patient yet")
+      ).toBeTruthy();
+    });
+  });
+
+  it("should show the forbidden message for an HTTP 403 medication error", async () => {
+    const forbiddenMedications = {
+      ...mockAllMedicationsProviderValue,
+      data: null,
+      error: {
+        response: {
+          status: 403,
+        },
+      },
+    };
+
+    const { getByText, queryByText } = renderTreatmentsWithMedications(
+      forbiddenMedications
+    );
+
+    await waitFor(() => {
+      expect(
+        getByText("User doesn't have required privilege(s)")
+      ).toBeTruthy();
+    });
+
+    expect(queryByText("Technical error")).toBeFalsy();
+  });
+
+  it("should show the generic message for an error without a response", async () => {
+    const genericMedications = {
+      ...mockAllMedicationsProviderValue,
+      data: null,
+      error: new Error("medication request failed"),
+    };
+
+    const { getByText, queryByText } = renderTreatmentsWithMedications(
+      genericMedications
+    );
+
+    await waitFor(() => {
+      expect(getByText("Technical error")).toBeTruthy();
+    });
+
+    expect(
+      queryByText("User doesn't have required privilege(s)")
+    ).toBeFalsy();
+  });
+});

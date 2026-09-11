@@ -437,8 +437,10 @@ const Treatments = (props) => {
         );
         setTreatments(allTreatments);
         getTreatmentConfigs();
+      } else if (!allMedications.error) {
+        return;
       } else if (
-        allMedications.error.response.status === errorCodes.FORBIDDEN
+        allMedications.error?.response?.status === errorCodes.FORBIDDEN
       ) {
         setIsLoading(false);
         setErrorMessage(ForbiddenErrorMessage);
