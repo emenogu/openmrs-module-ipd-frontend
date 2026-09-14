@@ -101,3 +101,28 @@
     width: 210px;
   }
 }
+
+@media screen and (max-width: 480px) {
+  .task-type {
+    gap: 16px;
+
+    .navigation-header,
+    .search-and-tasklist {
+      width: 100%;
+    }
+
+    .search-and-tasklist {
+      flex-direction: column;
+    }
+
+    .ward-patient-search {
+      width: 100%;
+      margin-right: 0;
+      margin-bottom: 8px;
+    }
+
+    .bx--dropdown {
+      width: 100%;
+    }
+  }
+}
