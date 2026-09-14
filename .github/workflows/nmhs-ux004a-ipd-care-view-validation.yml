@@ -1,0 +1,64 @@
+name: NMHS UX-004A Modern IPD Care View Validation
+
+on:
+  pull_request:
+    branches:
+      - ux-004a-modern-ipd-care-view-validation-base-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and test Modern IPD Care View responsive candidate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 14.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Verify responsive candidate scope
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/nmhs-changed.txt
+          cat /tmp/nmhs-changed.txt
+
+          test "$(wc -l < /tmp/nmhs-changed.txt)" -eq 2
+
+          grep -Fxq \
+            'src/features/CareViewPatients/styles/CareViewPatientsHeader.scss' \
+            /tmp/nmhs-changed.txt
+
+          grep -Fxq \
+            'src/features/CareViewSummary/styles/CareViewSummary.scss' \
+            /tmp/nmhs-changed.txt
+
+      - name: Run existing CI test command
+        run: yarn test:ci
+
+      - name: Upload browser artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmhs-ux004a-modern-ipd-care-view-browser-${{ github.sha }}
+          path: dist/federation
+          if-no-files-found: error
+          retention-days: 14
