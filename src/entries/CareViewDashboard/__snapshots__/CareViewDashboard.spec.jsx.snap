@@ -11,7 +11,7 @@ exports[`CareViewDashboard should match the snapshot 1`] = `
     >
       <a
         class="bx--link home"
-        href="/bahmni/home/#/dashboard"
+        href="/bahmni-v2/home/"
       >
         <svg
           aria-label="home-button"
