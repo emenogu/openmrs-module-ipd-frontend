@@ -1,0 +1,225 @@
+name: NMHS UX-004A IPD Modern Home Navigation Validation V1
+
+"on":
+  push:
+    branches:
+      - ux-004a-ipd-modern-home-navigation-v1-hosted-validation-v1
+    paths:
+      - .github/workflows/nmhs-ux004a-ipd-modern-home-navigation-validation-v1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nmhs-ux004a-ipd-modern-home-navigation-v1
+  cancel-in-progress: false
+
+env:
+  CONTROL_BRANCH: ux-004a-ipd-modern-home-navigation-v1-hosted-validation-v1
+  SOURCE_SHA: df25f974ab07e22dcbb641cc220eac8c57af9b56
+  SOURCE_TREE: b7785da306cd766eb92654138455c26ac5c0bd85
+  SOURCE_PARENT: 461c1cb225d8fcd32aad9bc2eaa5ecbb42a4ef48
+  CONSTANTS_PATH: src/constants.js
+  SNAPSHOT_PATH: src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap
+  PARENT_CONSTANTS_BLOB: 14632f19c3526462b6101bb4c70e3f9d736f7171
+  SOURCE_CONSTANTS_BLOB: 7c01d4be99869c5ea19ece4af6b139c08cb4aa31
+  PARENT_SNAPSHOT_BLOB: 669f36390c2569cb1d27966480cff5f4dd6bf4e1
+  SOURCE_SNAPSHOT_BLOB: 6e138ee84bba8dc877f76644c115307bdce5142a
+  CONSTANTS_SHA256: 9c3607159a73d784d5933b9cb5cb0a02f3cf729894ef99d5f114382d4255bede
+  SNAPSHOT_SHA256: 72a539739323563f2480fa4a776409add2d7ff80098305f422c5cf51c106df0d
+
+jobs:
+  validate:
+    name: Validate and build IPD modern Home navigation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout workflow control
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          path: control
+
+      - name: Verify workflow-only control
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd control
+
+          test "$GITHUB_REF_NAME" = "$CONTROL_BRANCH"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
+
+          test "$(
+            git diff               --name-status               "$SOURCE_SHA"               "$GITHUB_SHA"
+          )" = $'A\t.github/workflows/nmhs-ux004a-ipd-modern-home-navigation-validation-v1.yml'
+
+          git diff             "$SOURCE_SHA"             "$GITHUB_SHA"             --check
+
+          echo 'CONTROL_SCOPE=PASS'
+
+      - name: Checkout exact navigation source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 2
+          persist-credentials: false
+          path: source
+
+      - name: Verify immutable source contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd source
+
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_PARENT"
+
+          test -z "$(git status --porcelain=v1)"
+
+          test "$(
+            git diff               --name-status               "$SOURCE_PARENT"               "$SOURCE_SHA"
+          )" = $'M\tsrc/constants.js\nM\tsrc/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap'
+
+          test "$(
+            git rev-parse               "$SOURCE_PARENT:$CONSTANTS_PATH"
+          )" = "$PARENT_CONSTANTS_BLOB"
+
+          test "$(
+            git rev-parse               "$SOURCE_SHA:$CONSTANTS_PATH"
+          )" = "$SOURCE_CONSTANTS_BLOB"
+
+          test "$(
+            git rev-parse               "$SOURCE_PARENT:$SNAPSHOT_PATH"
+          )" = "$PARENT_SNAPSHOT_BLOB"
+
+          test "$(
+            git rev-parse               "$SOURCE_SHA:$SNAPSHOT_PATH"
+          )" = "$SOURCE_SNAPSHOT_BLOB"
+
+          test "$(
+            sha256sum "$CONSTANTS_PATH"               | awk '{print $1}'
+          )" = "$CONSTANTS_SHA256"
+
+          test "$(
+            sha256sum "$SNAPSHOT_PATH"               | awk '{print $1}'
+          )" = "$SNAPSHOT_SHA256"
+
+          git diff             "$SOURCE_PARENT"             "$SOURCE_SHA"             --check
+
+          echo 'SOURCE_IDENTITY=PASS'
+          echo 'SOURCE_SCOPE=PASS'
+
+      - name: Verify navigation semantics
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd source
+
+          test "$(
+            grep -Fxc               'export const homePageUrl = "/bahmni-v2/home/";'               "$CONSTANTS_PATH"
+          )" -eq 1
+
+          test "$(
+            grep -Fxc               'export const homePageUrl = "/bahmni/home/#/dashboard";'               "$CONSTANTS_PATH"               || true
+          )" -eq 0
+
+          test "$(
+            grep -Fxc               '        href="/bahmni-v2/home/"'               "$SNAPSHOT_PATH"
+          )" -eq 1
+
+          test "$(
+            grep -R -F               '/bahmni/home/#/changePassword'               src               --exclude-dir=node_modules               | wc -l
+          )" -eq 1
+
+          grep -Fq             'href={homePageUrl}'             src/entries/CareViewDashboard/CareViewDashboard.jsx
+
+          grep -Fq             'href={homePageUrl}'             src/entries/Dashboard/Dashboard.jsx
+
+          echo 'MODERN_HOME_TARGET=/bahmni-v2/home/'
+          echo 'CARE_VIEW_HOME_CONSUMER=PASS'
+          echo 'IPD_DASHBOARD_HOME_CONSUMER=PASS'
+          echo 'AUTH_ACCOUNT_ROUTE_PRESERVED=PASS'
+          echo 'NAVIGATION_SEMANTICS=PASS'
+
+      - name: Use Node.js 14.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+          cache: yarn
+          cache-dependency-path: source/yarn.lock
+
+      - name: Install dependencies
+        working-directory: source
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        working-directory: source
+        run: yarn build
+
+      - name: Run existing CI test command
+        working-directory: source
+        run: yarn test:ci
+
+      - name: Verify browser artifact contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd source
+
+          test -d dist/federation
+          test -f dist/federation/remoteEntry.js
+
+          if grep -R -F             '/bahmni/home/#/dashboard'             dist/federation
+          then
+            echo 'STOP: legacy Home dashboard route remains in built artifact' >&2
+            exit 1
+          fi
+
+          grep -R -F             '/bahmni-v2/home/'             dist/federation             >/dev/null
+
+          REMOTE_ENTRY_SHA="$(
+            sha256sum dist/federation/remoteEntry.js               | awk '{print $1}'
+          )"
+
+          echo "remoteEntry_sha256=$REMOTE_ENTRY_SHA"
+          echo 'BROWSER_ARTIFACT_CONTRACT=PASS'
+
+      - name: Upload immutable browser artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmhs-ux004a-ipd-modern-home-browser-${{ env.SOURCE_SHA }}
+          path: source/dist/federation
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record validation summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# NMHS UX-004A IPD Modern Home Navigation'
+            echo
+            echo "- Source: `df25f974ab07e22dcbb641cc220eac8c57af9b56`"
+            echo "- Tree: `b7785da306cd766eb92654138455c26ac5c0bd85`"
+            echo "- Parent: `461c1cb225d8fcd32aad9bc2eaa5ecbb42a4ef48`"
+            echo '- Functional delta: shared IPD Home destination only.'
+            echo '- Care View Home target: /bahmni-v2/home/'
+            echo '- IPD Dashboard Home target: /bahmni-v2/home/'
+            echo '- Authentication/account route changed: no.'
+            echo '- MAR changed: no.'
+            echo '- Medication changed: no.'
+            echo '- Nursing Tasks changed: no.'
+            echo '- Styling changed: no.'
+            echo '- Backend changed: no.'
+            echo '- Database changed: no.'
+            echo '- Production: NO-GO.'
+          } >> "$GITHUB_STEP_SUMMARY"
