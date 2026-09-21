@@ -33,8 +33,11 @@ jobs:
           set -Eeuo pipefail
 
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
           test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$SOURCE_TREE"
+
+          git merge-base --is-ancestor \
+            "$SOURCE_SHA" \
+            "$GITHUB_SHA"
 
           git diff \
             --name-only \
