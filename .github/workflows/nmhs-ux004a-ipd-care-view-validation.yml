@@ -246,29 +246,77 @@ jobs:
           from pathlib import Path
           import re
 
-          css_path = Path("dist/federation/styles.css")
+          css_root = Path("dist/federation")
 
-          if not css_path.is_file():
-              raise SystemExit(
-                  "Compiled federation styles.css missing"
-              )
-
-          css = css_path.read_text(
-              encoding="utf-8",
-              errors="strict",
+          css_paths = sorted(
+              p
+              for p in css_root.glob("*.css")
+              if p.is_file()
           )
 
-          compact = re.sub(r"\s+", " ", css).lower()
-
-          if "#0a3d62" not in compact:
+          if not css_paths:
               raise SystemExit(
-                  "Compiled NMHS primary colour missing"
+                  "No compiled federation CSS assets found"
               )
 
-          if "#072f4c" not in compact:
-              raise SystemExit(
-                  "Compiled NMHS hover colour missing"
+          print(
+              "compiled_css_asset_count="
+              + str(len(css_paths))
+          )
+
+          assets = []
+
+          for css_path in css_paths:
+              css = css_path.read_text(
+                  encoding="utf-8",
+                  errors="strict",
               )
+
+              compact = re.sub(
+                  r"\s+",
+                  " ",
+                  css,
+              ).lower()
+
+              assets.append(
+                  (
+                      css_path.as_posix(),
+                      compact,
+                  )
+              )
+
+              print(
+                  "CSS_ASSET "
+                  + css_path.as_posix()
+                  + " bytes="
+                  + str(css_path.stat().st_size)
+                  + " nmhs_primary="
+                  + str(compact.count("#0a3d62"))
+                  + " nmhs_hover="
+                  + str(compact.count("#072f4c"))
+                  + " care_view="
+                  + str(compact.count(".care-view-page"))
+                  + " spinner="
+                  + str(compact.count(".bx--loading__stroke"))
+                  + " task="
+                  + str(compact.count(".relevant-task-tile"))
+              )
+
+          aggregate = "\n".join(
+              css
+              for _, css in assets
+          )
+
+          if "#0a3d62" not in aggregate:
+              raise SystemExit(
+                  "Compiled NMHS primary colour missing from all CSS assets"
+              )
+
+          if "#072f4c" not in aggregate:
+              raise SystemExit(
+                  "Compiled NMHS hover colour missing from all CSS assets"
+              )
+
 
           def blocks_for_selector_fragment(fragment):
               pattern = re.compile(
@@ -277,14 +325,19 @@ jobs:
 
               result = []
 
-              for match in pattern.finditer(compact):
-                  selectors = match.group(1)
-                  declarations = match.group(2)
+              for asset_path, compact in assets:
+                  for match in pattern.finditer(compact):
+                      selectors = match.group(1).strip()
+                      declarations = match.group(2).strip()
 
-                  if fragment in selectors:
-                      result.append(
-                          (selectors.strip(), declarations.strip())
-                      )
+                      if fragment in selectors:
+                          result.append(
+                              (
+                                  asset_path,
+                                  selectors,
+                                  declarations,
+                              )
+                          )
 
               return result
 
@@ -298,26 +351,45 @@ jobs:
               + str(len(spinner_blocks))
           )
 
-          for selectors, declarations in spinner_blocks:
+          for asset_path, selectors, declarations in spinner_blocks:
               print(
-                  "SPINNER_BLOCK selectors="
+                  "SPINNER_BLOCK asset="
+                  + asset_path
+                  + " selectors="
                   + selectors
                   + " declarations="
                   + declarations
               )
 
-          spinner_ok = any(
-              ".care-view-page" in selectors
-              and re.search(
-                  r"(?:^|;)\s*stroke\s*:\s*#0a3d62(?:\s*!important)?\s*(?:;|$)",
+          spinner_matches = [
+              (
+                  asset_path,
+                  selectors,
                   declarations,
               )
-              for selectors, declarations in spinner_blocks
-          )
+              for asset_path, selectors, declarations in spinner_blocks
+              if ".care-view-page" in selectors
+              and re.search(
+                  r"(?:^|;)\s*stroke\s*:\s*#0a3d62"
+                  r"(?:\s*!important)?\s*(?:;|$)",
+                  declarations,
+              )
+          ]
 
-          if not spinner_ok:
+          if not spinner_matches:
               raise SystemExit(
-                  "Compiled Care View NMHS spinner rule missing"
+                  "Compiled Care View NMHS spinner rule missing "
+                  "from all CSS assets"
+              )
+
+          for asset_path, selectors, declarations in spinner_matches:
+              print(
+                  "NMHS_SPINNER_MATCH asset="
+                  + asset_path
+                  + " selectors="
+                  + selectors
+                  + " declarations="
+                  + declarations
               )
 
 
@@ -330,28 +402,46 @@ jobs:
               + str(len(header_blocks))
           )
 
-          for selectors, declarations in header_blocks:
+          for asset_path, selectors, declarations in header_blocks:
               if ".care-view-page" in selectors:
                   print(
-                      "CAREVIEW_HEADER_BLOCK selectors="
+                      "CAREVIEW_HEADER_BLOCK asset="
+                      + asset_path
+                      + " selectors="
                       + selectors
                       + " declarations="
                       + declarations
                   )
 
-          header_ok = any(
-              ".care-view-page" in selectors
+          header_matches = [
+              (
+                  asset_path,
+                  selectors,
+                  declarations,
+              )
+              for asset_path, selectors, declarations in header_blocks
+              if ".care-view-page" in selectors
               and re.search(
                   r"(?:^|;)\s*background(?:-color)?\s*:\s*#0a3d62"
                   r"(?:\s*!important)?\s*(?:;|$)",
                   declarations,
               )
-              for selectors, declarations in header_blocks
-          )
+          ]
 
-          if not header_ok:
+          if not header_matches:
               raise SystemExit(
-                  "Compiled Care View NMHS header rule missing"
+                  "Compiled Care View NMHS header rule missing "
+                  "from all CSS assets"
+              )
+
+          for asset_path, selectors, declarations in header_matches:
+              print(
+                  "NMHS_HEADER_MATCH asset="
+                  + asset_path
+                  + " selectors="
+                  + selectors
+                  + " declarations="
+                  + declarations
               )
 
 
@@ -364,36 +454,54 @@ jobs:
               + str(len(task_blocks))
           )
 
-          for selectors, declarations in task_blocks:
+          for asset_path, selectors, declarations in task_blocks:
               print(
-                  "TASK_BLOCK selectors="
+                  "TASK_BLOCK asset="
+                  + asset_path
+                  + " selectors="
                   + selectors
                   + " declarations="
                   + declarations
               )
 
-          task_ok = any(
-              re.search(
+          task_matches = [
+              (
+                  asset_path,
+                  selectors,
+                  declarations,
+              )
+              for asset_path, selectors, declarations in task_blocks
+              if re.search(
                   r"(?:^|;)\s*border\s*:\s*2px\s+solid\s+#007d79"
                   r"(?:\s*!important)?\s*(?:;|$)",
                   declarations,
               )
-              for _, declarations in task_blocks
-          )
+          ]
 
-          if not task_ok:
+          if not task_matches:
               raise SystemExit(
-                  "Compiled semantic Nursing Tasks border missing"
+                  "Compiled semantic Nursing Tasks border missing "
+                  "from all CSS assets"
+              )
+
+          for asset_path, selectors, declarations in task_matches:
+              print(
+                  "SEMANTIC_TASK_MATCH asset="
+                  + asset_path
+                  + " selectors="
+                  + selectors
+                  + " declarations="
+                  + declarations
               )
 
           print(
               "compiled_nmhs_primary_count="
-              + str(compact.count("#0a3d62"))
+              + str(aggregate.count("#0a3d62"))
           )
 
           print(
               "compiled_nmhs_hover_count="
-              + str(compact.count("#072f4c"))
+              + str(aggregate.count("#072f4c"))
           )
 
           print("COMPILED_PRESENTATION_CONTRACTS=PASS")
