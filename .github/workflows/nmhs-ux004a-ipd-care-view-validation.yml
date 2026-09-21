@@ -267,35 +267,118 @@ jobs:
                   "Compiled NMHS hover colour missing"
               )
 
-          spinner = re.search(
-              r"\.care-view-page\s+\.bx--loading__stroke"
-              r"\s*\{[^}]*stroke\s*:\s*#0a3d62",
-              compact,
+          def blocks_for_selector_fragment(fragment):
+              pattern = re.compile(
+                  r"([^{}]+)\{([^{}]*)\}"
+              )
+
+              result = []
+
+              for match in pattern.finditer(compact):
+                  selectors = match.group(1)
+                  declarations = match.group(2)
+
+                  if fragment in selectors:
+                      result.append(
+                          (selectors.strip(), declarations.strip())
+                      )
+
+              return result
+
+
+          spinner_blocks = blocks_for_selector_fragment(
+              ".bx--loading__stroke"
           )
 
-          if spinner is None:
+          print(
+              "spinner_block_count="
+              + str(len(spinner_blocks))
+          )
+
+          for selectors, declarations in spinner_blocks:
+              print(
+                  "SPINNER_BLOCK selectors="
+                  + selectors
+                  + " declarations="
+                  + declarations
+              )
+
+          spinner_ok = any(
+              ".care-view-page" in selectors
+              and re.search(
+                  r"(?:^|;)\s*stroke\s*:\s*#0a3d62(?:\s*!important)?\s*(?:;|$)",
+                  declarations,
+              )
+              for selectors, declarations in spinner_blocks
+          )
+
+          if not spinner_ok:
               raise SystemExit(
                   "Compiled Care View NMHS spinner rule missing"
               )
 
-          header = re.search(
-              r"\.care-view-page\s+\.header-bg-color"
-              r"\s*\{[^}]*background\s*:\s*#0a3d62",
-              compact,
+
+          header_blocks = blocks_for_selector_fragment(
+              ".header-bg-color"
           )
 
-          if header is None:
+          print(
+              "header_block_count="
+              + str(len(header_blocks))
+          )
+
+          for selectors, declarations in header_blocks:
+              if ".care-view-page" in selectors:
+                  print(
+                      "CAREVIEW_HEADER_BLOCK selectors="
+                      + selectors
+                      + " declarations="
+                      + declarations
+                  )
+
+          header_ok = any(
+              ".care-view-page" in selectors
+              and re.search(
+                  r"(?:^|;)\s*background(?:-color)?\s*:\s*#0a3d62"
+                  r"(?:\s*!important)?\s*(?:;|$)",
+                  declarations,
+              )
+              for selectors, declarations in header_blocks
+          )
+
+          if not header_ok:
               raise SystemExit(
                   "Compiled Care View NMHS header rule missing"
               )
 
-          task = re.search(
-              r"\.relevant-task-tile"
-              r"\s*\{[^}]*border\s*:\s*2px\s+solid\s+#007d79",
-              compact,
+
+          task_blocks = blocks_for_selector_fragment(
+              ".relevant-task-tile"
           )
 
-          if task is None:
+          print(
+              "semantic_task_block_count="
+              + str(len(task_blocks))
+          )
+
+          for selectors, declarations in task_blocks:
+              print(
+                  "TASK_BLOCK selectors="
+                  + selectors
+                  + " declarations="
+                  + declarations
+              )
+
+          task_ok = any(
+              re.search(
+                  r"(?:^|;)\s*border\s*:\s*2px\s+solid\s+#007d79"
+                  r"(?:\s*!important)?\s*(?:;|$)",
+                  declarations,
+              )
+              for _, declarations in task_blocks
+          )
+
+          if not task_ok:
               raise SystemExit(
                   "Compiled semantic Nursing Tasks border missing"
               )
