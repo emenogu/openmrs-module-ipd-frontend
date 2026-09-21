@@ -1,3 +1,5 @@
+@import "src/styles/styles";
+
 .ipd-page {
   color: #393939;
   font-family: "IBM Plex Sans", sans-serif;
@@ -33,7 +35,7 @@
   }
 
   .navbar-border {
-    border-right: 1px solid #007d79;
+    border-right: 1px solid $nmhs-primary;
   }
 
   .cursor-pointer {
@@ -45,17 +47,17 @@
   }
 
   a.bx--side-nav__link--current::before {
-    background-color: #007d79;
+    background-color: $nmhs-primary;
   }
 
   .header-bg-color {
-    background: #007d79;
+    background: $nmhs-primary;
   }
 
   .header-nav-toggle-btn {
     border: none;
     &:hover {
-      background-color: #007d79;
+      background-color: $nmhs-primary;
       fill: #ffffff;
       outline: none;
       border: none;
@@ -63,7 +65,7 @@
   }
 
   .bx--accordion__heading {
-    border-bottom: 1px solid #007d79;
+    border-bottom: 1px solid $nmhs-primary;
     border-radius: 0;
   }
 
@@ -118,7 +120,7 @@
       &:hover,
       &:focus {
         outline: none;
-        background-color: #004144;
+        background-color: $nmhs-primary-hover;
       }
     }
     .bx--link__icon {

@@ -1,3 +1,5 @@
+@import "src/styles/styles";
+
 .care-view-page {
   color: #393939;
   font-family: "IBM Plex Sans", sans-serif;
@@ -20,8 +22,16 @@
     color: white;
   }
 
+  /*
+   * Keep Carbon Loading lifecycle and DOM unchanged; only align its
+   * presentation with the canonical NMHS application palette.
+   */
+  .bx--loading__stroke {
+    stroke: $nmhs-primary;
+  }
+
   .home {
-    background-color: #007d79;
+    background-color: $nmhs-primary;
     color: #ffffff;
     outline: none;
     border: none;
@@ -32,7 +42,7 @@
     &:hover,
     &:focus {
       outline: none;
-      background-color: #004144;
+      background-color: $nmhs-primary-hover;
       color: #fff;
     }
   }
@@ -42,7 +52,7 @@
   }
 
   .header-bg-color {
-    background: #007d79;
+    background: $nmhs-primary;
   }
 
   .header-nav-toggle-btn {
@@ -50,7 +60,7 @@
   }
 
   .header-nav-toggle-btn:hover {
-    background-color: #007d79;
+    background-color: $nmhs-primary;
     fill: #ffffff;
     outline: none;
     border: none;

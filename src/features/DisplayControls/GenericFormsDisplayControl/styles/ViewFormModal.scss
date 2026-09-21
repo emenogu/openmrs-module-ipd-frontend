@@ -39,14 +39,14 @@
   }
 
   .view-form-container {
-    border: 2px solid #007d79;
+    border: 2px solid $nmhs-primary;
     border-radius: 6px;
   }
 
   .view-form-header {
     padding: 16px;
     color: #fff;
-    background-color: #007d79;
+    background-color: $nmhs-primary;
   }
 
   @media screen and (max-width: $tablet-breakpoint) {
