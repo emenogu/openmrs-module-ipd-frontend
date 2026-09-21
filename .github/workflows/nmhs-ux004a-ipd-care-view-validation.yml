@@ -1,24 +1,214 @@
-name: NMHS UX-004A Modern IPD Care View Validation
+name: NMHS UX-004A IPD Care View Branding Spinner V1 Hosted Validation
 
 on:
-  pull_request:
-    branches:
-      - ux-004a-modern-ipd-care-view-validation-base-v1
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: nmhs-ux004a-ipd-care-view-branding-spinner-v1-hosted-validation-v1
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 797a069b7b4cf594d4790726fdac382e353c8db4
+  SOURCE_TREE: 91dfc9135e50072e8bc372664c987db1626d10b0
+  SOURCE_PARENT: df25f974ab07e22dcbb641cc220eac8c57af9b56
+  ARTIFACT_NAME: nmhs-ux004a-ipd-care-view-branding-spinner-797a069-v1
+
 jobs:
   build-test:
-    name: Build and test Modern IPD Care View responsive candidate
+    name: Build test and validate IPD Care View branding candidate
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout candidate
+      - name: Checkout workflow control
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Verify workflow-only control
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$SOURCE_TREE"
+
+          git diff \
+            --name-only \
+            "$SOURCE_SHA" \
+            "$GITHUB_SHA" \
+            > /tmp/nmhs-control-files.txt
+
+          cat /tmp/nmhs-control-files.txt
+
+          test "$(wc -l < /tmp/nmhs-control-files.txt)" -eq 1
+
+          grep -Fxq \
+            '.github/workflows/nmhs-ux004a-ipd-care-view-validation.yml' \
+            /tmp/nmhs-control-files.txt
+
+          git diff \
+            --check \
+            "$SOURCE_SHA" \
+            "$GITHUB_SHA"
+
+          echo 'WORKFLOW_ONLY_CONTROL=PASS'
+
+      - name: Checkout exact source candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 797a069b7b4cf594d4790726fdac382e353c8db4
+          fetch-depth: 0
+
+      - name: Verify exact source identity and scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_PARENT"
+
+          git diff \
+            --name-only \
+            "$SOURCE_PARENT" \
+            "$SOURCE_SHA" \
+            > /tmp/nmhs-source-files.txt
+
+          cat /tmp/nmhs-source-files.txt
+
+          cat > /tmp/nmhs-expected-files.txt <<'EOF'
+          src/components/ProvideActions/ProviderActions.scss
+          src/components/VerticalTabs/VerticalTabs.scss
+          src/entries/CareViewDashboard/CareViewDashboard.scss
+          src/entries/Dashboard/Dashboard.scss
+          src/features/CareViewSummary/styles/CareViewSummary.scss
+          src/features/DisplayControls/GenericFormsDisplayControl/styles/ViewFormModal.scss
+          src/styles/styles.scss
+          EOF
+
+          diff -u \
+            /tmp/nmhs-expected-files.txt \
+            /tmp/nmhs-source-files.txt
+
+          test "$(wc -l < /tmp/nmhs-source-files.txt)" -eq 7
+
+          if grep -Ev '\.scss$' /tmp/nmhs-source-files.txt
+          then
+            echo 'Unexpected non-SCSS source mutation' >&2
+            exit 1
+          fi
+
+          git diff \
+            --check \
+            "$SOURCE_PARENT" \
+            "$SOURCE_SHA"
+
+          echo 'EXACT_SOURCE_SCOPE=PASS'
+
+      - name: Verify source presentation and clinical-safety contracts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          root = Path(".")
+
+          styles = (root / "src/styles/styles.scss").read_text(
+              encoding="utf-8"
+          )
+
+          required_tokens = (
+              "$nmhs-primary: #0a3d62;",
+              "$nmhs-primary-hover: #072f4c;",
+              "$nmhs-primary-active: #052439;",
+          )
+
+          for token in required_tokens:
+              if styles.count(token) != 1:
+                  raise SystemExit(
+                      "Missing or duplicated NMHS token: " + token
+                  )
+
+          presentation_files = (
+              "src/entries/CareViewDashboard/CareViewDashboard.scss",
+              "src/entries/Dashboard/Dashboard.scss",
+              "src/components/ProvideActions/ProviderActions.scss",
+              "src/components/VerticalTabs/VerticalTabs.scss",
+              "src/features/CareViewSummary/styles/CareViewSummary.scss",
+              "src/features/DisplayControls/GenericFormsDisplayControl/styles/ViewFormModal.scss",
+          )
+
+          for path in presentation_files:
+              text = (root / path).read_text(
+                  encoding="utf-8"
+              ).lower()
+
+              for old in ("#004144", "#007d79"):
+                  if old in text:
+                      raise SystemExit(
+                          f"Residual institutional teal {old}: {path}"
+                      )
+
+          care = (
+              root
+              / "src/entries/CareViewDashboard/CareViewDashboard.scss"
+          ).read_text(encoding="utf-8")
+
+          if care.count(".bx--loading__stroke") != 1:
+              raise SystemExit(
+                  "Care View NMHS loading presentation contract missing"
+              )
+
+          task = (
+              root
+              / "src/features/DisplayControls/NursingTasks/styles/TaskTile.scss"
+          ).read_text(encoding="utf-8").lower()
+
+          if task.count("#007d79") != 1:
+              raise SystemExit(
+                  "Semantic Nursing Tasks status colour changed"
+              )
+
+          dashboard_jsx = (
+              root
+              / "src/entries/CareViewDashboard/CareViewDashboard.jsx"
+          ).read_text(encoding="utf-8")
+
+          if "{isLoading && <Loading />}" not in dashboard_jsx:
+              raise SystemExit(
+                  "Care View Loading lifecycle contract changed"
+              )
+
+          constants = (
+              root / "src/constants.js"
+          ).read_text(encoding="utf-8")
+
+          if 'homePageUrl = "/bahmni-v2/home/"' not in constants:
+              raise SystemExit(
+                  "Modern Home navigation contract changed"
+              )
+
+          print("SOURCE_PRESENTATION_CONTRACTS=PASS")
+          PY
+
+          test "$(
+            git rev-parse \
+              "$SOURCE_SHA:src/features/DisplayControls/NursingTasks/styles/TaskTile.scss"
+          )" = '92d90e6d047612834c8b1a105044124ddc8a40f6'
+
+          git diff \
+            --quiet \
+            "$SOURCE_PARENT" \
+            "$SOURCE_SHA" \
+            -- '*.js' '*.jsx' '*.json' package.json yarn.lock
+
+          echo 'CLINICAL_LOGIC_PRESERVATION=PASS'
 
       - name: Use Node.js 14.x
         uses: actions/setup-node@v4
@@ -26,39 +216,159 @@ jobs:
           node-version: 14.x
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Build
-        run: yarn build
-
-      - name: Verify responsive candidate scope
-        if: github.event_name == 'pull_request'
+        shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          yarn install --frozen-lockfile
 
-          BASE_SHA='${{ github.event.pull_request.base.sha }}'
-          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+      - name: Build exact IPD federation artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/nmhs-changed.txt
-          cat /tmp/nmhs-changed.txt
+          yarn build
 
-          test "$(wc -l < /tmp/nmhs-changed.txt)" -eq 2
+          test -d dist/federation
+          test -s dist/federation/remoteEntry.js
+          test -s dist/federation/styles.css
 
-          grep -Fxq \
-            'src/features/CareViewPatients/styles/CareViewPatientsHeader.scss' \
-            /tmp/nmhs-changed.txt
+          echo 'PRODUCTION_BUILD=PASS'
 
-          grep -Fxq \
-            'src/features/CareViewSummary/styles/CareViewSummary.scss' \
-            /tmp/nmhs-changed.txt
+      - name: Verify compiled NMHS Care View contracts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          css_path = Path("dist/federation/styles.css")
+
+          if not css_path.is_file():
+              raise SystemExit(
+                  "Compiled federation styles.css missing"
+              )
+
+          css = css_path.read_text(
+              encoding="utf-8",
+              errors="strict",
+          )
+
+          compact = re.sub(r"\s+", " ", css).lower()
+
+          if "#0a3d62" not in compact:
+              raise SystemExit(
+                  "Compiled NMHS primary colour missing"
+              )
+
+          if "#072f4c" not in compact:
+              raise SystemExit(
+                  "Compiled NMHS hover colour missing"
+              )
+
+          spinner = re.search(
+              r"\.care-view-page\s+\.bx--loading__stroke"
+              r"\s*\{[^}]*stroke\s*:\s*#0a3d62",
+              compact,
+          )
+
+          if spinner is None:
+              raise SystemExit(
+                  "Compiled Care View NMHS spinner rule missing"
+              )
+
+          header = re.search(
+              r"\.care-view-page\s+\.header-bg-color"
+              r"\s*\{[^}]*background\s*:\s*#0a3d62",
+              compact,
+          )
+
+          if header is None:
+              raise SystemExit(
+                  "Compiled Care View NMHS header rule missing"
+              )
+
+          task = re.search(
+              r"\.relevant-task-tile"
+              r"\s*\{[^}]*border\s*:\s*2px\s+solid\s+#007d79",
+              compact,
+          )
+
+          if task is None:
+              raise SystemExit(
+                  "Compiled semantic Nursing Tasks border missing"
+              )
+
+          print(
+              "compiled_nmhs_primary_count="
+              + str(compact.count("#0a3d62"))
+          )
+
+          print(
+              "compiled_nmhs_hover_count="
+              + str(compact.count("#072f4c"))
+          )
+
+          print("COMPILED_PRESENTATION_CONTRACTS=PASS")
+          PY
 
       - name: Run existing CI test command
-        run: yarn test:ci
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          yarn test:ci
 
-      - name: Upload browser artifact
+      - name: Create immutable artifact manifest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cat > dist/federation/NMHS_UX004A_IPD_ARTIFACT.txt <<EOF
+          SOURCE_SHA=$SOURCE_SHA
+          SOURCE_TREE=$SOURCE_TREE
+          SOURCE_PARENT=$SOURCE_PARENT
+          CONTROL_SHA=$GITHUB_SHA
+          RUN_ID=$GITHUB_RUN_ID
+          RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT
+          ARTIFACT_NAME=$ARTIFACT_NAME
+          BUILD_COMMAND=yarn build
+          TEST_COMMAND=yarn test:ci
+          PRODUCTION=NO-GO
+          EOF
+
+          grep -Fxq \
+            "SOURCE_SHA=$SOURCE_SHA" \
+            dist/federation/NMHS_UX004A_IPD_ARTIFACT.txt
+
+          grep -Fxq \
+            "CONTROL_SHA=$GITHUB_SHA" \
+            dist/federation/NMHS_UX004A_IPD_ARTIFACT.txt
+
+          find dist/federation \
+            -type f \
+            -print0 |
+          sort -z |
+          xargs -0 sha256sum \
+            > dist/federation/NMHS_UX004A_IPD_SHA256SUMS.txt
+
+          echo 'ARTIFACT_MANIFEST=PASS'
+
+      - name: Upload immutable browser artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nmhs-ux004a-modern-ipd-care-view-browser-${{ github.sha }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: dist/federation
           if-no-files-found: error
           retention-days: 14
+
+      - name: Record validation boundary
+        if: always()
+        shell: bash
+        run: |
+          printf '%s\n' \
+            'Source lane=IPD frontend presentation only' \
+            'Backend mutation=NONE' \
+            'Database mutation=NONE' \
+            'IPD-001B=REMAINS_CLOSED' \
+            'Production=NO-GO'
