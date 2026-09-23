@@ -1,0 +1,204 @@
+name: NMHS G3 Care View Theme Immutable Publication
+
+"on":
+  push:
+    branches:
+      - g3-nmhs-theme-careview-publication-v1
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  SOURCE_SHA: 57d9043c78358a9599ac4d20a73f890833fcd588
+  SOURCE_TREE: 20018f3e6a7a4760d102dc487aa503db27e66352
+  SOURCE_PARENT: df25f974ab07e22dcbb641cc220eac8c57af9b56
+  VALIDATION_CONTROL: e2631ef9ed973fc6ce4248f27f40d3674cc34b44
+  VALIDATION_RUN: "35838636393"
+  BASE_IMAGE: ghcr.io/emenogu/nmhs-modern-ipd@sha256:b3965244b773d59f1b204ca9a3a3d232517015d9dc62a6f18109005ed550a196
+  IMAGE_NAME: ghcr.io/emenogu/nmhs-modern-ipd
+  IMAGE_TAG: g3-theme-57d9043c78358a9599ac4d20a73f890833fcd588
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout publication control
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          path: control
+
+      - name: Verify control
+        working-directory: control
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$SOURCE_TREE"
+
+          actual="$(
+            git diff --name-only "$SOURCE_SHA" HEAD |
+            sort
+          )"
+
+          expected="$(
+            printf '%s\n'               '.github/workflows/nmhs-g3-careview-publication.yml'               'nmhs-publication/g3-careview.Dockerfile' |
+            sort
+          )"
+
+          test "$actual" = "$expected"
+          git diff "$SOURCE_SHA" HEAD --check
+          grep -Fq "FROM $BASE_IMAGE" 'nmhs-publication/g3-careview.Dockerfile'
+
+      - name: Checkout exact validated source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: 57d9043c78358a9599ac4d20a73f890833fcd588
+          fetch-depth: 2
+          persist-credentials: false
+          path: source
+
+      - name: Verify exact source scope
+        working-directory: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SOURCE_TREE"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_PARENT"
+
+          expected="$(
+            printf '%s\n'               'src/styles/nmhsTheme.scss'               'src/entries/CareViewDashboard/CareViewDashboard.scss'               'src/entries/Dashboard/Dashboard.scss' |
+            sort
+          )"
+
+          observed="$(
+            git diff --name-only "$SOURCE_PARENT" "$SOURCE_SHA" |
+            sort
+          )"
+
+          test "$expected" = "$observed"
+
+          git diff             --quiet             "$SOURCE_PARENT"             "$SOURCE_SHA"             -- src/features/DisplayControls/NursingTasks/styles/TaskTile.scss
+
+          echo 'SOURCE_SCOPE=PASS'
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '14.21.3'
+
+      - name: Rebuild and test exact source
+        working-directory: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          yarn install --frozen-lockfile
+          yarn build
+          yarn test:ci
+
+          test -d dist/federation
+
+          grep -RIl             --include='*.css'             '#0a3d62'             dist/federation >/dev/null
+
+          grep -RIl             --include='*.css'             '#0f62fe'             dist/federation >/dev/null
+
+      - name: Prepare exact runtime stage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p "$RUNNER_TEMP/ipd-stage"
+          cp -a source/dist/federation/. "$RUNNER_TEMP/ipd-stage/"
+
+          find "$RUNNER_TEMP/ipd-stage"             -type d             -exec chmod 0755 {} +
+
+          find "$RUNNER_TEMP/ipd-stage"             -type f             -exec chmod 0644 {} +
+
+          test -f "$RUNNER_TEMP/ipd-stage/remoteEntry.js"
+
+      - name: Authenticate GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" |
+            docker login ghcr.io               -u "$GITHUB_ACTOR"               --password-stdin
+
+      - name: Build image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          docker pull "$BASE_IMAGE"
+
+          context="$RUNNER_TEMP/ipd-context"
+          mkdir -p "$context/runtime-stage"
+
+          cp control/nmhs-publication/g3-careview.Dockerfile "$context/Dockerfile"
+          cp -a "$RUNNER_TEMP/ipd-stage/." "$context/runtime-stage/"
+
+          image="$IMAGE_NAME:$IMAGE_TAG"
+
+          docker build             --platform linux/amd64             --pull=false             --build-arg "SOURCE_SHA=$SOURCE_SHA"             --build-arg "SOURCE_TREE=$SOURCE_TREE"             --build-arg "VALIDATION_CONTROL=$VALIDATION_CONTROL"             --build-arg "VALIDATION_RUN=$VALIDATION_RUN"             -t "$image"             "$context"
+
+          echo "CANDIDATE_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Publish
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          log="$RUNNER_TEMP/ipd-push.log"
+          docker push "$CANDIDATE_IMAGE" | tee "$log"
+
+          digest="$(
+            sed -n               's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p'               "$log" |
+            tail -n 1
+          )"
+
+          test -n "$digest"
+          echo "PUBLISHED_DIGEST=$digest" >> "$GITHUB_ENV"
+
+      - name: Pullback byte-equivalence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          ref="$IMAGE_NAME@$PUBLISHED_DIGEST"
+          docker pull "$ref"
+
+          cid="$(docker create "$ref")"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+
+          mkdir -p "$RUNNER_TEMP/ipd-pullback"
+
+          docker cp             "$cid:/usr/local/apache2/htdocs/ipd/."             "$RUNNER_TEMP/ipd-pullback/"
+
+          python3 -             "$RUNNER_TEMP/ipd-stage"             "$RUNNER_TEMP/ipd-pullback" <<'PY'
+          from pathlib import Path
+          import hashlib
+          import sys
+
+          def inv(root):
+              root = Path(root)
+              out = {}
+              for p in root.rglob("*"):
+                  if p.is_file():
+                      out[p.relative_to(root).as_posix()] =                           hashlib.sha256(p.read_bytes()).hexdigest()
+              return out
+
+          if inv(sys.argv[1]) != inv(sys.argv[2]):
+              raise SystemExit("STOP: IPD pullback mismatch")
+
+          print("IPD_PULLBACK=PASS")
+          PY
+
+          echo "IMMUTABLE_REFERENCE=$ref"
