@@ -1,0 +1,94 @@
+/*
+ * NMHS presentation overlay.
+ *
+ * Scope:
+ * - non-semantic application chrome
+ * - shell/header/navigation
+ * - primary interaction accents
+ *
+ * Clinical/task/status semantics remain in their source styles.
+ *
+ * Removal condition:
+ * remove when upstream provides an equivalent supported theme seam
+ * matching the accepted NMHS presentation contract.
+ */
+
+$nmhs-header: #0a3d62;
+$nmhs-primary: #0f62fe;
+$nmhs-primary-hover: #0353e9;
+$nmhs-background: #f4f7fb;
+
+.care-view-page,
+.ipd-page {
+  .header-bg-color {
+    background: $nmhs-header;
+  }
+
+  .home {
+    background-color: $nmhs-header;
+
+    &:hover,
+    &:focus {
+      background-color: $nmhs-primary;
+    }
+  }
+
+  .header-nav-toggle-btn:hover,
+  .header-nav-toggle-btn:focus {
+    background-color: $nmhs-primary;
+  }
+
+  a.bx--side-nav__link--current::before {
+    background-color: $nmhs-primary;
+  }
+
+  .navbar-border,
+  .bx--accordion__heading,
+  .care-view-summary {
+    border-color: $nmhs-primary;
+  }
+
+  .vertical-tabs-parent .tab.active {
+    border-left-color: $nmhs-primary;
+  }
+
+  .view-form-container {
+    border-color: $nmhs-primary;
+  }
+
+  .view-form-header {
+    background-color: $nmhs-header;
+  }
+
+  .bx--btn--primary {
+    background-color: $nmhs-primary;
+
+    &:hover,
+    &:focus {
+      background-color: $nmhs-primary-hover;
+    }
+  }
+
+  .bx--batch-actions,
+  .bx--batch-summary {
+    background-color: $nmhs-primary;
+  }
+
+  .flatpickr-day.selected,
+  .flatpickr-day.endRange.inRange.selected {
+    background-color: $nmhs-primary;
+  }
+
+  .flatpickr-day:focus {
+    outline-color: $nmhs-primary;
+  }
+
+  .bx--pagination-nav__page:not(.bx--pagination-nav__page--direction)::after,
+  .bx--pagination-nav__select-icon-wrapper:not(.bx--pagination-nav__page--direction)::after {
+    background-color: $nmhs-primary;
+  }
+
+  .bx--tooltip--definition .bx--tooltip__trigger {
+    border-bottom-color: $nmhs-primary;
+  }
+}
