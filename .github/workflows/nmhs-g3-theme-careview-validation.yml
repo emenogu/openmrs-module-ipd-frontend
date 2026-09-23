@@ -1,0 +1,104 @@
+name: NMHS G3 Care View Theme Validation
+
+"on":
+  push:
+    branches:
+      - g3-nmhs-theme-careview-v1-hosted-validation-v1
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 57d9043c78358a9599ac4d20a73f890833fcd588
+  SOURCE_TREE: 20018f3e6a7a4760d102dc487aa503db27e66352
+  SOURCE_PARENT: df25f974ab07e22dcbb641cc220eac8c57af9b56
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout control
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          path: control
+
+      - name: Verify control construction
+        working-directory: control
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$SOURCE_TREE"
+          test "$(
+            git diff --name-only "$SOURCE_SHA" HEAD
+          )" = '.github/workflows/nmhs-g3-theme-careview-validation.yml'
+          git diff "$SOURCE_SHA" HEAD --check
+
+      - name: Checkout exact source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: 57d9043c78358a9599ac4d20a73f890833fcd588
+          fetch-depth: 2
+          persist-credentials: false
+          path: source
+
+      - name: Verify exact theme scope
+        working-directory: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          expected="$(
+            printf '%s\n'               'src/styles/nmhsTheme.scss'               'src/entries/CareViewDashboard/CareViewDashboard.scss'               'src/entries/Dashboard/Dashboard.scss' |
+            sort
+          )"
+
+          observed="$(
+            git diff               --name-only               "$SOURCE_PARENT"               "$SOURCE_SHA" |
+            sort
+          )"
+
+          test "$expected" = "$observed"
+
+          grep -Fq '#0a3d62' 'src/styles/nmhsTheme.scss'
+          grep -Fq '#0f62fe' 'src/styles/nmhsTheme.scss'
+          grep -Fq '#f4f7fb' 'src/styles/nmhsTheme.scss'
+
+          git diff             --quiet             "$SOURCE_PARENT"             "$SOURCE_SHA"             -- src/features/DisplayControls/NursingTasks/styles/TaskTile.scss
+
+          echo 'CAREVIEW_SCOPE=PASS'
+          echo 'TASK_SEMANTICS_PRESERVED=PASS'
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '14.21.3'
+
+      - name: Install dependencies
+        working-directory: source
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        working-directory: source
+        run: yarn build
+
+      - name: Test
+        working-directory: source
+        run: yarn test:ci
+
+      - name: Verify compiled theme
+        working-directory: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -d dist/federation
+
+          grep -RIl             --include='*.css'             '#0a3d62'             dist/federation >/dev/null
+
+          grep -RIl             --include='*.css'             '#0f62fe'             dist/federation >/dev/null
+
+          echo 'CAREVIEW_COMPILED_THEME=PASS'
