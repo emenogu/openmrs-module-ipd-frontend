@@ -1,0 +1,131 @@
+name: NMHS G2 Final Modern IPD Publication V2
+
+"on":
+  push:
+    branches:
+      - g2-ipd-final-runtime-publication-v2
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+env:
+  SOURCE_SHA: df25f974ab07e22dcbb641cc220eac8c57af9b56
+  SOURCE_TREE: b7785da306cd766eb92654138455c26ac5c0bd85
+  SOURCE_PARENT: 461c1cb225d8fcd32aad9bc2eaa5ecbb42a4ef48
+  VALIDATION_CONTROL: 5b33a25299fb4c200635240f81bfc7115f3316ea
+  VALIDATION_RUN: "35468838050"
+  ARTIFACT_ID: "10591749751"
+  ARTIFACT_SHA256: 625ee59a418c8810d99eecc302edf67d8db22d3ae1be9f11f46b2785a015d206
+  EXPECTED_REMOTE_ENTRY: 3bc2cad953d80494ea021491c48b9f5e6b8abd0d8d058a3979c0cea32670e24e
+  IMAGE_NAME: ghcr.io/emenogu/nmhs-modern-ipd
+  IMAGE_TAG: g2-final-v2-df25f974ab07e22dcbb641cc220eac8c57af9b56
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout publication control
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify publication control
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA"
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$SOURCE_TREE"
+          test "$(git rev-parse "$SOURCE_SHA^")" = "$SOURCE_PARENT"
+          actual="$(git diff --name-only "$SOURCE_SHA" "$GITHUB_SHA" | sort)"
+          expected="$(printf '%s\n' '.github/workflows/nmhs-g2-final-publication.yml' 'nmhs-publication/Dockerfile' | sort)"
+          test "$actual" = "$expected"
+          git diff "$SOURCE_SHA" "$GITHUB_SHA" --check
+          echo 'PUBLICATION_CONTROL=PASS'
+
+      - name: Download accepted artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          zip="$RUNNER_TEMP/ipd.zip"
+          gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > "$zip"
+          test "$(sha256sum "$zip" | awk '{print $1}')" = "$ARTIFACT_SHA256"
+          mkdir -p "$RUNNER_TEMP/artifact"
+          python3 -m zipfile -e "$zip" "$RUNNER_TEMP/artifact"
+
+      - name: Verify accepted artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/artifact"
+          remote="$(find "$root" -type f -name remoteEntry.js -print)"
+          test "$(printf '%s\n' "$remote" | sed '/^$/d' | wc -l)" -eq 1
+          payload="$(dirname "$remote")"
+          test "$(sha256sum "$remote" | awk '{print $1}')" = "$EXPECTED_REMOTE_ENTRY"
+          test "$(find "$payload" -type f | wc -l | tr -d '[:space:]')" -eq 50
+          mkdir -p "$RUNNER_TEMP/runtime-stage"
+          cp -a "$payload/." "$RUNNER_TEMP/runtime-stage/"
+          find "$RUNNER_TEMP/runtime-stage" -type d -exec chmod 0755 {} +
+          find "$RUNNER_TEMP/runtime-stage" -type f -exec chmod 0644 {} +
+          echo 'ACCEPTED_ARTIFACT=PASS'
+
+      - name: Prepare build context
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p build-context/runtime-stage
+          cp nmhs-publication/Dockerfile build-context/Dockerfile
+          cp -a "$RUNNER_TEMP/runtime-stage/." build-context/runtime-stage/
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Publish
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: build-context
+          file: build-context/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          build-args: |
+            SOURCE_SHA=${{ env.SOURCE_SHA }}
+            SOURCE_TREE=${{ env.SOURCE_TREE }}
+            SOURCE_PARENT=${{ env.SOURCE_PARENT }}
+            VALIDATION_CONTROL=${{ env.VALIDATION_CONTROL }}
+            VALIDATION_RUN=${{ env.VALIDATION_RUN }}
+            ARTIFACT_ID=${{ env.ARTIFACT_ID }}
+            ARTIFACT_SHA256=${{ env.ARTIFACT_SHA256 }}
+
+      - name: Pullback verification
+        shell: bash
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          ref="${IMAGE_NAME}@${DIGEST}"
+          docker pull "$ref"
+          cid="$(docker create "$ref")"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          mkdir -p "$RUNNER_TEMP/pulled"
+          docker cp "$cid:/usr/local/apache2/htdocs/ipd/." "$RUNNER_TEMP/pulled/"
+          test "$(sha256sum "$RUNNER_TEMP/pulled/remoteEntry.js" | awk '{print $1}')" = "$EXPECTED_REMOTE_ENTRY"
+          test "$(find "$RUNNER_TEMP/pulled" -type f | wc -l | tr -d '[:space:]')" -eq 50
+          echo "IMMUTABLE_REFERENCE=$ref"
+          echo 'PULLBACK=PASS'
