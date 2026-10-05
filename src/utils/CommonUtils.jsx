@@ -4,7 +4,9 @@ import {
   CONFIG_BAHMNIENCOUNTER_URL,
   DASHBORAD_CONFIG_URL,
   FETCH_ALL_FORM_DETAILS_URL,
+  FETCH_ALL_OBSERVATIONS_IN_ENCOUNTER_URL,
   FORM_BASE_URL,
+  GLOBAL_PROPERTY_URL,
   SEARCH_CONCEPT_URL,
   SEARCH_DRUG_URL,
   DAEMON_USER,
@@ -23,6 +25,8 @@ export const getIPDPatientDashboardUrl = (
 export const getADTDashboardUrl = (patientUuid, visitUuid, encounterUuid) =>
   `/bahmni/adt/#/patient/${patientUuid}/visit/${visitUuid}/encounter/${encounterUuid}/bed`;
 
+export const getAdtHomeUrl = () => `/bahmni/adt/#/home`;
+
 export const searchDrugsByName = async (query) => {
   try {
     return await axios.get(SEARCH_DRUG_URL.replace("{queryString}", query));
@@ -39,6 +43,8 @@ export const getAppLandingPageUrl = (source) => {
   switch (source) {
     case "adt":
       return adtHomePageUrl;
+    case "adtHome":
+      return getAdtHomeUrl();
     case "clinical":
       return clinicalHomePageUrl;
     case "careViewDashboard":
@@ -139,10 +145,41 @@ export const getDashboardConfig = async () => {
       withCredentials: true,
     });
     if (response.status !== 200) throw new Error(response.statusText);
-    return response;
+
+    // Enrich config with shift details from global property
+    const config = response.data || {};
+    config.shiftDetails = await getShiftDetailsFromGlobalProperty();
+
+    return { ...response, data: config };
   } catch (error) {
     return error;
   }
+};
+
+export const getShiftDetailsFromGlobalProperty = async () => {
+  try {
+    const response = await axios.get(GLOBAL_PROPERTY_URL, {
+      params: { property: "ipd.shiftDetails" },
+      withCredentials: true,
+      headers: { Accept: "text/plain" },
+    });
+    if (response.status !== 200) throw new Error(response.statusText);
+    const shiftDetails = response.data;
+    if (shiftDetails && Object.keys(shiftDetails).length > 0) {
+      return shiftDetails;
+    }
+  } catch (error) {
+    console.warn(
+      "Failed to fetch shift details from Global Property 'ipd.shiftDetails'. " +
+        "Using default fallback timings. Please configure the Global Property for your region. Error:",
+      error.message
+    );
+  }
+  // Default fallback
+  return {
+    1: { shiftStartTime: "08:00", shiftEndTime: "19:00" },
+    2: { shiftStartTime: "19:00", shiftEndTime: "08:00" },
+  };
 };
 
 export const getAllFormsInfo = async () => {
@@ -152,6 +189,20 @@ export const getAllFormsInfo = async () => {
     });
   } catch (error) {
     return error;
+  }
+};
+
+export const fetchObservationsForEncounter = async (encounterUuid) => {
+  try {
+    const url = FETCH_ALL_OBSERVATIONS_IN_ENCOUNTER_URL.replace(
+      "{encounterUuid}",
+      encounterUuid
+    );
+    const response = await axios.get(url, { withCredentials: true });
+    return response.data;
+  } catch (e) {
+    console.error(e);
+    return null;
   }
 };
 
@@ -177,6 +228,22 @@ export const getFetchFormTranslationsUrl = (formName, formUuid) => {
     "/openmrs/ws/rest/v1" +
     `/bahmniie/form/translate?formName=${formName}&formUuid=${formUuid}&formVersion=1&locale=en`
   );
+};
+
+export const getTranslationKey = (attribute, moduleName) => {
+  if (typeof attribute !== "undefined") {
+    let keyPrefix = moduleName ? moduleName : "IPD";
+
+    let keyName = attribute
+      .toUpperCase()
+      .replace(/\s\s+/g, " ")
+      .replace(/[^a-zA-Z0-9 _]/g, "")
+      .trim()
+      .replace(/ /g, "_");
+
+    let translationKey = `${keyPrefix}_${keyName}`;
+    return translationKey;
+  }
 };
 
 export const getNoDataCapturedMessage = (formName) => {
@@ -241,9 +308,15 @@ export const mockConfig = {
     timeInMinutesToDisableSlotPostScheduledTime: 60,
   },
   enable24HourTime: true,
+  enableAddMultipleTask: true,
+  nursingTaskScheduling: {
+    enableDateSelection: true,
+    maxFutureDaysAllowed: 60,
+  },
   medicationTags: {
     asNeeded: "Rx-PRN",
     "STAT (Immediately)": "Rx-STAT",
+    "Loading Dose": "Rx",
     default: "Rx",
     emergency: "EMERG",
   },
@@ -345,9 +418,15 @@ export const mockConfigFor12HourFormat = {
     timeInMinutesToDisableSlotPostScheduledTime: 60,
   },
   enable24HourTime: false,
+  enableAddMultipleTask: true,
+  nursingTaskScheduling: {
+    enableDateSelection: true,
+    maxFutureDaysAllowed: 60,
+  },
   medicationTags: {
     asNeeded: "Rx-PRN",
     "STAT (Immediately)": "Rx-STAT",
+    "Loading Dose": "Rx",
     default: "Rx",
     emergency: "EMERG",
   },
@@ -369,5 +448,7 @@ export const isIPDrugOrder = (drugOrder) => {
 };
 
 export const isUserPrivileged = (user, privilege) => {
-  return user?.privileges?.some((userPrivilege) => userPrivilege.name === privilege);
-}
+  return user?.privileges?.some(
+    (userPrivilege) => userPrivilege.name === privilege
+  );
+};
