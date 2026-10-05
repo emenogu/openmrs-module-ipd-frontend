@@ -54,6 +54,12 @@ jobs:
       CARE_VIEW_SUMMARY_PATIENT_CELL_TEST: src/features/CareViewPatientsSummary/tests/PatientDetailsCell.spec.jsx
       CARE_VIEW_PATIENTS_TEST: src/features/CareViewPatients/test/CareViewPatients.spec.jsx
       CARE_VIEW_PATIENTS_HEADER_TEST: src/features/CareViewPatients/test/CareViewPatientsHeader.spec.jsx
+      MULTI_TASK_FEATURE: 0cb714360a08a4276b127a2d338eb7111319e2b8
+      MULTI_TASK_PARENT: 1873be01b97e00ea2bd1fc014a5e34d417f70e4b
+      ADD_EMERGENCY_TASKS: src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
+      ADD_EMERGENCY_TASKS_TEST: src/features/DisplayControls/NursingTasks/tests/AddEmergencyTasks.spec.jsx
+      EMERGENCY_TASKS_UTILS: src/features/DisplayControls/NursingTasks/utils/EmergencyTasksUtils.js
+      EMERGENCY_TASKS_STYLE: src/features/DisplayControls/NursingTasks/styles/EmergencyTasks.scss
 
     steps:
       - name: Checkout NMHS control branch
@@ -98,6 +104,22 @@ jobs:
           git fetch --no-tags bahmni-upstream "$TASK_FORM_FEATURE"
           test "$(git rev-parse FETCH_HEAD)" = "$TASK_FORM_FEATURE"
           git cat-file -e "$TASK_FORM_FEATURE^"
+
+          # HIVE-121634 exact upstream provenance: bulk Add More task creation.
+          git fetch --no-tags bahmni-upstream "$MULTI_TASK_FEATURE"
+          test "$(git rev-parse FETCH_HEAD)" = "$MULTI_TASK_FEATURE"
+          test "$(git rev-parse "$MULTI_TASK_FEATURE^")" = "$MULTI_TASK_PARENT"
+          git diff --name-only "$MULTI_TASK_PARENT" "$MULTI_TASK_FEATURE" | sort > /tmp/multi-task-paths.txt
+          test "$(wc -l < /tmp/multi-task-paths.txt)" -eq 13
+          grep -Fxq "$ADD_EMERGENCY_TASKS" /tmp/multi-task-paths.txt
+          grep -Fxq "$ADD_EMERGENCY_TASKS_TEST" /tmp/multi-task-paths.txt
+          grep -Fxq "$EMERGENCY_TASKS_UTILS" /tmp/multi-task-paths.txt
+          grep -Fxq "$EMERGENCY_TASKS_STYLE" /tmp/multi-task-paths.txt
+          git show "$MULTI_TASK_FEATURE:$ADD_EMERGENCY_TASKS" > /tmp/multi-task-add-emergency.jsx
+          grep -Fq 'enableAddMultipleTask = false' /tmp/multi-task-add-emergency.jsx
+          grep -Fq 'saveBulkNonMedicationTasks' /tmp/multi-task-add-emergency.jsx
+          grep -Fq 'const appendNonMedicationTask' /tmp/multi-task-add-emergency.jsx
+          grep -Fq 'const removeNonMedicationTask' /tmp/multi-task-add-emergency.jsx
 
           git show "$TASK_FORM_FEATURE:$TASK_FORM_LINK" > /tmp/upstream-task-form-link.jsx
           diff -u /tmp/upstream-task-form-link.jsx "$TASK_FORM_LINK"
@@ -209,6 +231,13 @@ jobs:
           grep -Fq '"NEW":' "$EN_LOCALE_RECONCILIATION"
           grep -Fq '"PENDING":' "$EN_LOCALE_RECONCILIATION"
 
+          # HIVE-121634 candidate-state semantics after aggregate reconciliation.
+          grep -Fq 'enableAddMultipleTask = false' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'saveBulkNonMedicationTasks' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'const appendNonMedicationTask' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'const removeNonMedicationTask' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'export const saveBulkNonMedicationTasks' "$EMERGENCY_TASKS_UTILS"
+
           # Preserve the reviewed NMHS snapshot for this bounded stop/unstop gate.
           # The obsolete cancel snapshot was intentionally removed after replacing it with a deterministic behavior assertion.
           git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_PRESERVE"
@@ -277,6 +306,10 @@ jobs:
             echo "CARE_INSTRUCTIONS_SCOPE=component-style-utils-tests-dashboard-mapping"
             echo "CARE_VIEW_ACK_SOURCE=$UPSTREAM_FEATURE"
             echo "CARE_VIEW_ACK_SCOPE=nurse-acknowledgement-filter-new-pending-previous-shift"
+            echo "MULTI_TASK_FEATURE=$MULTI_TASK_FEATURE"
+            echo "MULTI_TASK_PARENT=$MULTI_TASK_PARENT"
+            echo "MULTI_TASK_SCOPE=HIVE-121634-bulk-add-more-single-day"
+            echo "MULTI_TASK_CLASSIFICATION=exact-upstream-feature-provenance-in-selective-candidate"
             echo "CONTROL_COMMIT=$GITHUB_SHA"
             echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
@@ -326,6 +359,13 @@ jobs:
             "$CARE_VIEW_SUMMARY_PATIENT_CELL_TEST" \
             "$CARE_VIEW_PATIENTS_TEST" \
             "$CARE_VIEW_PATIENTS_HEADER_TEST"
+
+      - name: Run targeted multiple-task creation acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          TZ=UTC yarn jest --ci --runInBand --runTestsByPath \
+            "$ADD_EMERGENCY_TASKS_TEST"
 
       - name: Build selective candidate
         run: yarn build
