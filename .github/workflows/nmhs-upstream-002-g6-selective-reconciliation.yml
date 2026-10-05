@@ -1,0 +1,159 @@
+name: NMHS UPSTREAM-002 G6 Selective Reconciliation Control
+
+on:
+  push:
+    branches:
+      - upstream-002-g6-selective-nonconflict-v1
+    paths:
+      - '.github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-build-test:
+    name: Prove selective upstream reconciliation
+    runs-on: ubuntu-latest
+
+    env:
+      ACCEPTED_BASE: d85ee48226a2d4c9831c9adaa5ac06e3584d6dc7
+      UPSTREAM_FEATURE: 6afeda361e3e321e7dd3d764016d1d5941ce7c6c
+      CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
+
+    steps:
+      - name: Checkout NMHS control branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove control-only branch delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$ACCEPTED_BASE^{commit}"
+          git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
+          cat /tmp/control-delta.txt
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 1
+          grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
+
+      - name: Fetch exact upstream feature source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote remove bahmni-upstream 2>/dev/null || true
+          git remote add bahmni-upstream https://github.com/Bahmni/openmrs-module-ipd-frontend.git
+          git fetch --no-tags bahmni-upstream "$UPSTREAM_FEATURE"
+          test "$(git rev-parse FETCH_HEAD)" = "$UPSTREAM_FEATURE"
+          git cat-file -e "$UPSTREAM_FEATURE^"
+          git diff --name-only "$UPSTREAM_FEATURE^" "$UPSTREAM_FEATURE" | sort > /tmp/upstream-paths.txt
+          cat /tmp/upstream-paths.txt
+          test "$(wc -l < /tmp/upstream-paths.txt)" -eq 51
+
+      - name: Reconcile only non-conflicting upstream paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p g6-evidence
+
+          set +e
+          git cherry-pick --no-commit "$UPSTREAM_FEATURE"
+          rc=$?
+          set -e
+
+          test "$rc" -ne 0
+
+          git diff --name-only --diff-filter=U | sort > g6-evidence/conflicts.txt
+          echo '=== CONFLICT PATHS ==='
+          cat g6-evidence/conflicts.txt
+          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 12
+
+          # Resolve every conflict by restoring the accepted NMHS file exactly.
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
+              git restore --source="$ACCEPTED_BASE" --staged --worktree -- "$path"
+            else
+              git rm -f --ignore-unmatch -- "$path"
+            fi
+          done < g6-evidence/conflicts.txt
+
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+          git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" | sort > g6-evidence/applied-paths.txt
+          echo '=== APPLIED NON-CONFLICT PATHS ==='
+          cat g6-evidence/applied-paths.txt
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 39
+
+          comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > g6-evidence/expected-applied-paths.txt
+          diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
+
+          if comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt | grep -q .; then
+            echo 'STOP: a conflict path leaked into the selective candidate' >&2
+            exit 1
+          fi
+
+      - name: Prove conflicted NMHS files are byte-identical to accepted base
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > g6-evidence/conflict-preservation-sha256.txt
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
+              before="$(git show "$ACCEPTED_BASE:$path" | sha256sum | awk '{print $1}')"
+              after="$(sha256sum "$path" | awk '{print $1}')"
+              test "$before" = "$after"
+              printf '%s  %s\n' "$after" "$path" >> g6-evidence/conflict-preservation-sha256.txt
+            else
+              test ! -e "$path"
+              printf 'ABSENT  %s\n' "$path" >> g6-evidence/conflict-preservation-sha256.txt
+            fi
+          done < g6-evidence/conflicts.txt
+          cat g6-evidence/conflict-preservation-sha256.txt
+
+      - name: Record immutable reconciliation provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "ACCEPTED_NMHS_BASE=$ACCEPTED_BASE"
+            echo "UPSTREAM_FEATURE=$UPSTREAM_FEATURE"
+            echo "CONTROL_COMMIT=$GITHUB_SHA"
+            echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
+            echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
+            echo "APPLIED_NONCONFLICT_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
+          } > g6-evidence/PROVENANCE.txt
+          cp /tmp/upstream-paths.txt g6-evidence/upstream-paths.txt
+          cat g6-evidence/PROVENANCE.txt
+
+      - name: Use Node.js 14.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build selective candidate
+        run: yarn build
+
+      - name: Run existing CI tests
+        run: yarn test:ci
+
+      - name: Hash browser artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist/federation -type f -print0 | sort -z | xargs -0 sha256sum > g6-evidence/DIST_SHA256SUMS
+          test -s g6-evidence/DIST_SHA256SUMS
+
+      - name: Upload reconciliation evidence and browser candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-002-g6-selective-reconciliation-${{ github.sha }}
+          path: |
+            g6-evidence/
+            dist/federation/
+          if-no-files-found: error
+          retention-days: 14
