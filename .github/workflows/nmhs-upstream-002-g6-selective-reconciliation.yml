@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   reconcile-build-test:
@@ -63,12 +63,23 @@ jobs:
       FUTURE_TASK_FEATURE: df405b3e68c8582df57b8d98dfc9d7c3ba0eec11
       FUTURE_TASK_PARENT: 6585df5027d3db68da3d78944e43eaa9808f4dde
       DATE_TIME_UTILS: src/utils/DateTimeUtils.js
+      TARGET_BRANCH: upstream-002-g6-immutable-source-candidate-v2
 
     steps:
       - name: Checkout NMHS control branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Prove immutable target branch does not already exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
+            echo "STOP: immutable target branch already exists: $TARGET_BRANCH" >&2
+            exit 1
+          fi
+          echo "TARGET_BRANCH=$TARGET_BRANCH"
 
       - name: Prove control-only branch delta
         shell: bash
@@ -427,3 +438,30 @@ jobs:
             dist/federation/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Commit and publish immutable reconciled source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The source tree is already staged by the proven cherry-pick/reconciliation
+          # procedure. Evidence/build output must never enter the source commit.
+          rm -rf g6-evidence
+          git status --short
+
+          test -n "$(git diff --cached --name-only)"
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+          git config user.name "NMHS Hosted Validation"
+          git config user.email "actions@users.noreply.github.com"
+
+          git commit -m "UPSTREAM-002 materialize validated G6 frontend source"
+          CANDIDATE_SHA="$(git rev-parse HEAD)"
+          test -n "$CANDIDATE_SHA"
+
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+          echo "IMMUTABLE_FRONTEND_SOURCE=$CANDIDATE_SHA"
+          echo "TARGET_BRANCH=$TARGET_BRANCH"
+          echo "PRODUCTION=NO-GO"
+          echo "REHEARSAL_DEPLOYMENT=PROHIBITED"
