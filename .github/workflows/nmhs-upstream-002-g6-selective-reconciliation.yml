@@ -21,6 +21,7 @@ jobs:
       UPSTREAM_FEATURE: 6afeda361e3e321e7dd3d764016d1d5941ce7c6c
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
       HARNESS_RECONCILIATION: src/setupTests.js
+      NOTIFICATION_RECONCILIATION: src/components/Notification/Notification.jsx
       TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
       TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
@@ -38,9 +39,10 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 4
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 5
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
 
@@ -57,6 +59,10 @@ jobs:
           # Harness reconciliation must be the exact upstream feature-state file.
           git show "$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION" > /tmp/upstream-setupTests.js
           diff -u /tmp/upstream-setupTests.js "$HARNESS_RECONCILIATION"
+
+          # Notification reconciliation must be the exact upstream feature-state file.
+          git show "$UPSTREAM_FEATURE:$NOTIFICATION_RECONCILIATION" > /tmp/upstream-notification.jsx
+          diff -u /tmp/upstream-notification.jsx "$NOTIFICATION_RECONCILIATION"
 
           # Preserve exact upstream source for bounded stopped-task fixture extraction.
           git show "$UPSTREAM_FEATURE:$TASK_MOCK_RECONCILIATION" > /tmp/upstream-task-mock.js
@@ -81,7 +87,7 @@ jobs:
           git diff --name-only --diff-filter=U | sort > g6-evidence/conflicts.txt
           echo '=== CONFLICT PATHS ==='
           cat g6-evidence/conflicts.txt
-          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 12
+          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 11
 
           # Resolve every conflict by restoring the accepted NMHS file exactly.
           while IFS= read -r path; do
@@ -110,7 +116,7 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 41
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 42
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
@@ -164,6 +170,8 @@ jobs:
             echo "CONTROL_COMMIT=$GITHUB_SHA"
             echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
+            echo "NOTIFICATION_RECONCILIATION=$NOTIFICATION_RECONCILIATION"
+            echo "NOTIFICATION_SOURCE=$UPSTREAM_FEATURE:$NOTIFICATION_RECONCILIATION"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
             echo "APPLIED_RECONCILED_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
