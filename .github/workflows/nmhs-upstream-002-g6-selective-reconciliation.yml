@@ -20,6 +20,7 @@ jobs:
       ACCEPTED_BASE: d85ee48226a2d4c9831c9adaa5ac06e3584d6dc7
       UPSTREAM_FEATURE: 6afeda361e3e321e7dd3d764016d1d5941ce7c6c
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
+      HARNESS_RECONCILIATION: src/setupTests.js
 
     steps:
       - name: Checkout NMHS control branch
@@ -34,8 +35,13 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 1
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 2
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
+          grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
+
+          # Harness reconciliation must be the exact upstream feature-state file.
+          git show "$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION" > /tmp/upstream-setupTests.js
+          diff -u /tmp/upstream-setupTests.js "$HARNESS_RECONCILIATION"
 
       - name: Fetch exact upstream feature source
         shell: bash
@@ -80,7 +86,7 @@ jobs:
 
           test -z "$(git diff --name-only --diff-filter=U)"
 
-          git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" | sort > g6-evidence/applied-paths.txt
+          git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
           test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 39
@@ -120,6 +126,8 @@ jobs:
             echo "ACCEPTED_NMHS_BASE=$ACCEPTED_BASE"
             echo "UPSTREAM_FEATURE=$UPSTREAM_FEATURE"
             echo "CONTROL_COMMIT=$GITHUB_SHA"
+            echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
+            echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
             echo "APPLIED_NONCONFLICT_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
