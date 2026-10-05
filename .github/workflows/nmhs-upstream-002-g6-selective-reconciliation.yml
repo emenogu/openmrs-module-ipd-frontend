@@ -39,10 +39,6 @@ jobs:
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
 
-          # Harness reconciliation must be the exact upstream feature-state file.
-          git show "$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION" > /tmp/upstream-setupTests.js
-          diff -u /tmp/upstream-setupTests.js "$HARNESS_RECONCILIATION"
-
       - name: Fetch exact upstream feature source
         shell: bash
         run: |
@@ -52,6 +48,11 @@ jobs:
           git fetch --no-tags bahmni-upstream "$UPSTREAM_FEATURE"
           test "$(git rev-parse FETCH_HEAD)" = "$UPSTREAM_FEATURE"
           git cat-file -e "$UPSTREAM_FEATURE^"
+
+          # Harness reconciliation must be the exact upstream feature-state file.
+          git show "$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION" > /tmp/upstream-setupTests.js
+          diff -u /tmp/upstream-setupTests.js "$HARNESS_RECONCILIATION"
+
           git diff --name-only "$UPSTREAM_FEATURE^" "$UPSTREAM_FEATURE" | sort > /tmp/upstream-paths.txt
           cat /tmp/upstream-paths.txt
           test "$(wc -l < /tmp/upstream-paths.txt)" -eq 51
