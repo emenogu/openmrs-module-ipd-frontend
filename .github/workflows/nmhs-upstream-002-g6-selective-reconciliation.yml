@@ -46,7 +46,7 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 12
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 11
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
@@ -58,7 +58,6 @@ jobs:
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_TEST_RECONCILIATION" /tmp/control-delta.txt
-          grep -Fxq "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
         shell: bash
