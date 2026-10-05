@@ -47,7 +47,7 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 11
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 12
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
@@ -59,6 +59,7 @@ jobs:
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_TEST_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
         shell: bash
@@ -134,20 +135,23 @@ jobs:
 
           test -z "$(git diff --name-only --diff-filter=U)"
 
-          # Preserve the accepted NMHS snapshot for this bounded stop/unstop gate.
-          # Upstream's snapshot ID shifts come from broader tests intentionally not adopted here.
+          # Preserve the reviewed NMHS snapshot for this bounded stop/unstop gate.
+          # The obsolete cancel snapshot was intentionally removed after replacing it with a deterministic behavior assertion.
           git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_PRESERVE"
+          snapshot_after="$(sha256sum "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" | awk '{print $1}')"
+          snapshot_branch="$(git show HEAD:"$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" | sha256sum | awk '{print $1}')"
+          test "$snapshot_after" = "$snapshot_branch"
 
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 47
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 48
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt | grep -Fvx "$UPDATE_NURSING_SNAPSHOT_PRESERVE" > /tmp/nonconflict-paths.txt
           grep -Fxv "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" /tmp/nonconflict-paths.txt > /tmp/nonconflict-paths-reviewed.txt
           {
             cat /tmp/nonconflict-paths-reviewed.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
@@ -206,6 +210,7 @@ jobs:
             echo "UPDATE_NURSING_SCOPE=stop-unstop-only"
             echo "UPDATE_NURSING_TEST_RECONCILIATION=$UPDATE_NURSING_TEST_RECONCILIATION"
             echo "UPDATE_NURSING_SNAPSHOT_RECONCILIATION=$UPDATE_NURSING_SNAPSHOT_RECONCILIATION"
+            echo "UPDATE_NURSING_CANCEL_TEST=deterministic-callback-assertion"
             echo "NOTIFICATION_SNAPSHOT=$NOTIFICATION_SNAPSHOT"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
