@@ -89,37 +89,7 @@ jobs:
                 ;;
               "$TASK_MOCK_RECONCILIATION")
                 git restore --source="$ACCEPTED_BASE" --staged --worktree -- "$path"
-                python3 - "$path" <<'PY'
-import sys
-p=sys.argv[1]
-s=open(p).read()
-anchor="export const mockShiftResponse = ["
-fixture='''export const mockStoppedNonMedicationTileData = [
-  {
-    drugName: "Non-Medication task",
-    uuid: "72af0cfa-be74-42a8-b650-45f6978314dd",
-    startTimeInEpochSeconds: 1703601000,
-    startTime: "16:38",
-    isDisabled: true,
-    status: "Stopped",
-    partOf: null,
-    taskType: { display: "Non Medication Task" },
-    creator: {
-      uuid: "c1c21e11-3f10-11e4-adec-0800271c1b75",
-      display: "bailly.rurangirwa",
-    },
-    isANonMedicationTask: true,
-  },
-];
-
-'''
-if "mockStoppedNonMedicationTileData" in s:
-    raise SystemExit("STOP: stopped-task fixture already present before bounded insertion")
-if anchor not in s:
-    raise SystemExit("STOP: mock fixture anchor missing")
-s=s.replace(anchor, fixture+anchor, 1)
-open(p,"w").write(s)
-PY
+                python3 -c 'import sys; p=sys.argv[1]; s=open(p).read(); anchor="export const mockShiftResponse = ["; fixture="export const mockStoppedNonMedicationTileData = [\\n  {\\n    drugName: \\"Non-Medication task\\",\\n    uuid: \\"72af0cfa-be74-42a8-b650-45f6978314dd\\",\\n    startTimeInEpochSeconds: 1703601000,\\n    startTime: \\"16:38\\",\\n    isDisabled: true,\\n    status: \\"Stopped\\",\\n    partOf: null,\\n    taskType: { display: \\"Non Medication Task\\" },\\n    creator: {\\n      uuid: \\"c1c21e11-3f10-11e4-adec-0800271c1b75\\",\\n      display: \\"bailly.rurangirwa\\",\\n    },\\n    isANonMedicationTask: true,\\n  },\\n];\\n\\n"; (_ for _ in ()).throw(SystemExit("STOP: stopped-task fixture already present before bounded insertion")) if "mockStoppedNonMedicationTileData" in s else None; (_ for _ in ()).throw(SystemExit("STOP: mock fixture anchor missing")) if anchor not in s else None; open(p,"w").write(s.replace(anchor, fixture+anchor, 1))' "$path"
                 git add -- "$path"
                 ;;
               *)
@@ -142,13 +112,13 @@ PY
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
             cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
           comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
           {
-            printf '%s\n' "$TASK_TILE_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
           } | sort > /tmp/expected-applied-conflicts.txt
           diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
