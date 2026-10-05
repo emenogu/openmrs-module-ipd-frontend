@@ -22,7 +22,6 @@ jobs:
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
       HARNESS_RECONCILIATION: src/setupTests.js
       TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
-      TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
 
     steps:
@@ -38,11 +37,10 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 5
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 4
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
-          grep -Fxq "$TASK_MOCK_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
