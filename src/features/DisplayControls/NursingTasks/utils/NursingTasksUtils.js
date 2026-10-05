@@ -4,8 +4,14 @@ import {
   ADMINISTERED_MEDICATIONS_BASE_URL,
   asNeededPlaceholderConceptName,
   NON_MEDICATION_BASE_URL,
+  DOSE_UNITS,
 } from "../../../../constants";
 import { isSystemGeneratedTask } from "../../../../utils/CommonUtils";
+import {
+  parseFhirDosages,
+  getDosageBySequence,
+  fhirDosageToDisplayStage,
+} from "../../../../utils/FhirDosingUtils";
 import moment from "moment";
 
 export const fetchMedicationNursingTasks = async (
@@ -71,19 +77,46 @@ export const ExtractMedicationNursingTasksData = (
         if (order.duration) {
           duration = order.duration + " " + order.durationUnits.display;
         }
-        if (
-          order.doseUnits.display !== "ml" &&
-          order.doseUnits.display !== "mg"
-        ) {
+        if (!DOSE_UNITS.includes(order.doseUnits.display)) {
           dosage = order.dose;
           doseType = order.doseUnits.display;
         } else {
           dosage = order.dose + order.doseUnits.display;
         }
+        const administrationInstructions = order.dosingInstructions
+          ? JSON.parse(order.dosingInstructions)
+          : null;
         dosingInstructions = {
           asNeeded: order.asNeeded,
           frequency: order.frequency?.display,
         };
+      }
+      if (slot.variableDosageSequence != null) {
+        const fhirDosages = parseFhirDosages(order?.dosingInstructions);
+        const stageDosage = getDosageBySequence(
+          fhirDosages,
+          slot.variableDosageSequence
+        );
+        if (stageDosage) {
+          const dr = stageDosage.doseAndRate?.[0];
+          if (dr?.doseQuantity) {
+            const val = dr.doseQuantity.value;
+            const unit = dr.doseQuantity.unit || "";
+            if (DOSE_UNITS.includes(unit.toLowerCase())) {
+              dosage = val + unit;
+              doseType = "";
+            } else {
+              dosage = val;
+              doseType = unit;
+            }
+          }
+          const stageInfo = fhirDosageToDisplayStage(stageDosage);
+          dosingInstructions = {
+            asNeeded: false,
+            frequency: stageInfo.frequency || null,
+          };
+          duration = stageInfo.duration || null;
+        }
       }
       if (serviceType == "EmergencyMedicationRequest") {
         drugName = medicationAdministration.drug?.display;
@@ -133,7 +166,7 @@ export const ExtractMedicationNursingTasksData = (
 
       if (
         (filterValue.id === "stopped" || filterValue.id === "allTasks") &&
-        slot.status === "STOPPED"
+        (slot.status === "STOPPED" || slot.status === "CANCELLED")
       ) {
         stoppedExtractedData.push({
           ...slotInfo,
@@ -290,7 +323,8 @@ export const ExtractNonMedicationTasks = (
   const groupedData = [],
     completedExtractedData = [],
     pendingExtractedData = [],
-    skippedExtractedData = [];
+    skippedExtractedData = [],
+    stoppedExtractedData = [];
   nonMedicationTasks?.forEach((nonMedicationTask) => {
     const {
       name,
@@ -314,14 +348,15 @@ export const ExtractNonMedicationTasks = (
         minute: "2-digit",
         hourCycle: "h23",
       }),
+      requestedStartTime,
       partOf,
       isDisabled: isReadMode
         ? true
-        : status === "COMPLETED" || status === "REJECTED",
+        : status === "COMPLETED" || status === "REJECTED" || status === "CANCELLED",
       executionEndTime: executionEndTime,
-      administeredTime: status === "REJECTED" ? null : executionEndTime,
+      administeredTime: (status === "REJECTED" || status === "CANCELLED") ? null : executionEndTime,
       administeredTimeInEpochSeconds:
-        status === "REJECTED" ? null : executionEndTime,
+        (status === "REJECTED" || status === "CANCELLED") ? null : executionEndTime,
       status,
       isANonMedicationTask: true,
       token,
@@ -335,6 +370,14 @@ export const ExtractNonMedicationTasks = (
       taskInfo.status === "REQUESTED"
     ) {
       pendingExtractedData.push(taskInfo);
+    } else if (
+      (filterValue.id === "stopped" || filterValue.id === "allTasks") &&
+      taskInfo.status === "CANCELLED"
+    ) {
+      stoppedExtractedData.push({
+        ...taskInfo,
+        status: "Stopped",
+      });
     } else if (
       (filterValue.id === "skipped" || filterValue.id === "allTasks") &&
       taskInfo.status === "REJECTED"
@@ -371,6 +414,7 @@ export const ExtractNonMedicationTasks = (
   }
 
   groupedData.push(...completedExtractedData.map((item) => [item]));
+  groupedData.push(...stoppedExtractedData.map((item) => [item]));
   groupedData.push(...skippedExtractedData.map((item) => [item]));
   return groupedData;
 };
@@ -412,15 +456,17 @@ export const disableDoneTogglePostNextTaskTime = (
 
 export const getLatestFormUuid = (formName, allFormsSummary) => {
   if (!formName || !allFormsSummary || !allFormsSummary.length) return null;
-  const matches = allFormsSummary.filter((form) => form.name === formName);
+  const matches = allFormsSummary.filter((f) => f.name === formName);
   if (!matches.length) return null;
+  // Compare version segments numerically to handle multi-digit minors correctly
+  // e.g., "1.10" > "1.9" (not 1.1 < 1.9 as parseFloat would give)
   const compareVersions = (a, b) => {
-    const aParts = a.version.split(".").map(Number);
-    const bParts = b.version.split(".").map(Number);
+    const aParts = a.version.split('.').map(Number);
+    const bParts = b.version.split('.').map(Number);
     for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
       const aPart = aParts[i] || 0;
       const bPart = bParts[i] || 0;
-      if (bPart !== aPart) return bPart - aPart;
+      if (bPart !== aPart) return bPart - aPart; // Descending order (latest first)
     }
     return 0;
   };
@@ -434,4 +480,3 @@ export const getFormNameFromTaskInput = (input, formTaskInputConceptUuid) => {
   );
   return formInput?.valueText || null;
 };
-
