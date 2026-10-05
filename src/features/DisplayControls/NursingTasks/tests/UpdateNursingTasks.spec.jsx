@@ -812,6 +812,105 @@ describe("UpdateNursingTasksSlider", function () {
     expect(screen.queryByText("Stop Task")).toBeNull();
   });
 
+
+  it("should link a non-medication task using configured taskToFormMapping", () => {
+    const mappedTask = {
+      ...mockNonMedicationTileData[0],
+      drugName: "Complete Nursing Initial Assessment Form",
+    };
+
+    render(
+      <IntlProvider locale="en">
+        <IPDContext.Provider
+          value={{
+            config: {
+              ...mockConfig,
+              taskToFormMapping: {
+                "Complete Nursing Initial Assessment Form":
+                  "Nursing Initial Assessment",
+              },
+            },
+            allFormsSummary: [
+              {
+                name: "Nursing Initial Assessment",
+                version: "1",
+                uuid: "form-uuid-1",
+              },
+            ],
+            handleAuditEvent: mockHandleAuditLogEvent,
+            currentUser: mockUserWithAllRequiredPrivileges,
+          }}
+        >
+          <UpdateNursingTasks
+            medicationTasks={[mappedTask]}
+            groupSlotsByOrderId={mockGroupSlotsByOrderId}
+            updateNursingTasksSlider={jest.fn}
+            patientId="patient-uuid-1"
+            providerId="test_provider_uuid"
+            setShowNotification={mockSetShowNotification}
+            setNotificationMessage={mockSetNotificationMessage}
+            setNotificationStatus={mockSetNotificationStatus}
+          />
+        </IPDContext.Provider>
+      </IntlProvider>
+    );
+
+    const link = screen.getByRole("link", {
+      name: "Complete Nursing Initial Assessment Form",
+    });
+    expect(link.getAttribute("href")).toContain(
+      "/patient/patient-uuid-1/dashboard/concept-set-group/observations/form/form-uuid-1"
+    );
+  });
+
+  it("should link a non-medication task using FHIR task input form-resource mapping", () => {
+    const inputMappedTask = {
+      ...mockNonMedicationTileData[0],
+      drugName: "System Form Task",
+      input: [
+        {
+          type: { uuid: "form-resource-uuid", display: "form-resource" },
+          valueText: "Vitals",
+        },
+      ],
+    };
+
+    render(
+      <IntlProvider locale="en">
+        <IPDContext.Provider
+          value={{
+            config: {
+              ...mockConfig,
+              config: { formTaskInputConceptUuid: "form-resource-uuid" },
+            },
+            allFormsSummary: [
+              { name: "Vitals", version: "2", uuid: "vitals-v2" },
+              { name: "Vitals", version: "10", uuid: "vitals-v10" },
+            ],
+            handleAuditEvent: mockHandleAuditLogEvent,
+            currentUser: mockUserWithAllRequiredPrivileges,
+          }}
+        >
+          <UpdateNursingTasks
+            medicationTasks={[inputMappedTask]}
+            groupSlotsByOrderId={mockGroupSlotsByOrderId}
+            updateNursingTasksSlider={jest.fn}
+            patientId="patient-uuid-2"
+            providerId="test_provider_uuid"
+            setShowNotification={mockSetShowNotification}
+            setNotificationMessage={mockSetNotificationMessage}
+            setNotificationStatus={mockSetNotificationStatus}
+          />
+        </IPDContext.Provider>
+      </IntlProvider>
+    );
+
+    const link = screen.getByRole("link", { name: "System Form Task" });
+    expect(link.getAttribute("href")).toContain(
+      "/patient/patient-uuid-2/dashboard/concept-set-group/observations/form/vitals-v10"
+    );
+  });
+
   it("should show toggle disabled when privileges are not preset", function () {
     const { queryAllByTestId, container } = render(
       <IPDContext.Provider
