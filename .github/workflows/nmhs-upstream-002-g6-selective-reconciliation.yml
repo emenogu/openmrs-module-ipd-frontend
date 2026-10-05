@@ -22,6 +22,7 @@ jobs:
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
       HARNESS_RECONCILIATION: src/setupTests.js
       TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
+      TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
 
     steps:
@@ -77,7 +78,7 @@ jobs:
           git diff --name-only --diff-filter=U | sort > g6-evidence/conflicts.txt
           echo '=== CONFLICT PATHS ==='
           cat g6-evidence/conflicts.txt
-          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 11
+          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 12
 
           # Resolve every conflict by restoring the accepted NMHS file exactly.
           while IFS= read -r path; do
@@ -85,6 +86,41 @@ jobs:
             case "$path" in
               "$TASK_TILE_RECONCILIATION")
                 git restore --source=HEAD --staged --worktree -- "$path"
+                ;;
+              "$TASK_MOCK_RECONCILIATION")
+                git restore --source="$ACCEPTED_BASE" --staged --worktree -- "$path"
+                python3 - "$path" <<'PY'
+import sys
+p=sys.argv[1]
+s=open(p).read()
+anchor="export const mockShiftResponse = ["
+fixture='''export const mockStoppedNonMedicationTileData = [
+  {
+    drugName: "Non-Medication task",
+    uuid: "72af0cfa-be74-42a8-b650-45f6978314dd",
+    startTimeInEpochSeconds: 1703601000,
+    startTime: "16:38",
+    isDisabled: true,
+    status: "Stopped",
+    partOf: null,
+    taskType: { display: "Non Medication Task" },
+    creator: {
+      uuid: "c1c21e11-3f10-11e4-adec-0800271c1b75",
+      display: "bailly.rurangirwa",
+    },
+    isANonMedicationTask: true,
+  },
+];
+
+'''
+if "mockStoppedNonMedicationTileData" in s:
+    raise SystemExit("STOP: stopped-task fixture already present before bounded insertion")
+if anchor not in s:
+    raise SystemExit("STOP: mock fixture anchor missing")
+s=s.replace(anchor, fixture+anchor, 1)
+open(p,"w").write(s)
+PY
+                git add -- "$path"
                 ;;
               *)
                 if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
@@ -106,7 +142,7 @@ jobs:
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
             cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
@@ -127,6 +163,11 @@ jobs:
               after="$(sha256sum "$path" | awk '{print $1}')"
               branch_sha="$(git show HEAD:"$path" | sha256sum | awk '{print $1}')"
               test "$after" = "$branch_sha"
+              printf 'RECONCILED %s  %s\n' "$after" "$path" >> g6-evidence/conflict-preservation-sha256.txt
+            elif [ "$path" = "$TASK_MOCK_RECONCILIATION" ]; then
+              count="$(grep -c '^export const mockStoppedNonMedicationTileData = ' "$path")"
+              test "$count" -eq 1
+              after="$(sha256sum "$path" | awk '{print $1}')"
               printf 'RECONCILED %s  %s\n' "$after" "$path" >> g6-evidence/conflict-preservation-sha256.txt
             elif git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
               before="$(git show "$ACCEPTED_BASE:$path" | sha256sum | awk '{print $1}')"
@@ -153,7 +194,7 @@ jobs:
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
             echo "APPLIED_RECONCILED_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
-            echo "RECONCILED_CONFLICT_PATHS=$TASK_TILE_RECONCILIATION"
+            echo "RECONCILED_CONFLICT_PATHS=$TASK_TILE_RECONCILIATION,$TASK_MOCK_RECONCILIATION"
           } > g6-evidence/PROVENANCE.txt
           cp /tmp/upstream-paths.txt g6-evidence/upstream-paths.txt
           cat g6-evidence/PROVENANCE.txt
