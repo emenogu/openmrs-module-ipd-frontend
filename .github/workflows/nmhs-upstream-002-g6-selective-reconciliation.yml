@@ -60,6 +60,9 @@ jobs:
       ADD_EMERGENCY_TASKS_TEST: src/features/DisplayControls/NursingTasks/tests/AddEmergencyTasks.spec.jsx
       EMERGENCY_TASKS_UTILS: src/features/DisplayControls/NursingTasks/utils/EmergencyTasksUtils.js
       EMERGENCY_TASKS_STYLE: src/features/DisplayControls/NursingTasks/styles/EmergencyTasks.scss
+      FUTURE_TASK_FEATURE: df405b3e68c8582df57b8d98dfc9d7c3ba0eec11
+      FUTURE_TASK_PARENT: 6585df5027d3db68da3d78944e43eaa9808f4dde
+      DATE_TIME_UTILS: src/utils/DateTimeUtils.js
 
     steps:
       - name: Checkout NMHS control branch
@@ -120,6 +123,21 @@ jobs:
           grep -Fq 'saveBulkNonMedicationTasks' /tmp/multi-task-add-emergency.jsx
           grep -Fq 'const appendNonMedicationTask' /tmp/multi-task-add-emergency.jsx
           grep -Fq 'const removeNonMedicationTask' /tmp/multi-task-add-emergency.jsx
+
+          # HIVE-123554 exact upstream provenance: future-date task scheduling.
+          git fetch --no-tags bahmni-upstream "$FUTURE_TASK_FEATURE"
+          test "$(git rev-parse FETCH_HEAD)" = "$FUTURE_TASK_FEATURE"
+          test "$(git rev-parse "$FUTURE_TASK_FEATURE^")" = "$FUTURE_TASK_PARENT"
+          git diff --name-only "$FUTURE_TASK_PARENT" "$FUTURE_TASK_FEATURE" | sort > /tmp/future-task-paths.txt
+          test "$(wc -l < /tmp/future-task-paths.txt)" -eq 17
+          grep -Fxq "$ADD_EMERGENCY_TASKS" /tmp/future-task-paths.txt
+          grep -Fxq "$ADD_EMERGENCY_TASKS_TEST" /tmp/future-task-paths.txt
+          grep -Fxq "$DATE_TIME_UTILS" /tmp/future-task-paths.txt
+          git show "$FUTURE_TASK_FEATURE:$ADD_EMERGENCY_TASKS" > /tmp/future-task-add-emergency.jsx
+          grep -Fq 'enableDateSelection: true' /tmp/future-task-add-emergency.jsx
+          grep -Fq 'maxFutureDaysAllowed: 60' /tmp/future-task-add-emergency.jsx
+          grep -Fq 'nursingTaskScheduling = DEFAULT_NURSING_TASK_SCHEDULING' /tmp/future-task-add-emergency.jsx
+          grep -Fq 'scheduleDate: getStartOfToday()' /tmp/future-task-add-emergency.jsx
 
           git show "$TASK_FORM_FEATURE:$TASK_FORM_LINK" > /tmp/upstream-task-form-link.jsx
           diff -u /tmp/upstream-task-form-link.jsx "$TASK_FORM_LINK"
@@ -238,6 +256,15 @@ jobs:
           grep -Fq 'const removeNonMedicationTask' "$ADD_EMERGENCY_TASKS"
           grep -Fq 'export const saveBulkNonMedicationTasks' "$EMERGENCY_TASKS_UTILS"
 
+          # HIVE-123554 candidate-state semantics after aggregate reconciliation.
+          grep -Fq 'enableDateSelection: true' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'maxFutureDaysAllowed: 60' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'nursingTaskScheduling = DEFAULT_NURSING_TASK_SCHEDULING' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'scheduleDate: getStartOfToday()' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'maxDate={maxScheduleDate}' "$ADD_EMERGENCY_TASKS"
+          grep -Fq 'export const getStartOfToday' "$DATE_TIME_UTILS"
+          grep -Fq 'export const getEndOfDay' "$DATE_TIME_UTILS"
+
           # Preserve the reviewed NMHS snapshot for this bounded stop/unstop gate.
           # The obsolete cancel snapshot was intentionally removed after replacing it with a deterministic behavior assertion.
           git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_PRESERVE"
@@ -310,6 +337,10 @@ jobs:
             echo "MULTI_TASK_PARENT=$MULTI_TASK_PARENT"
             echo "MULTI_TASK_SCOPE=HIVE-121634-bulk-add-more-single-day"
             echo "MULTI_TASK_CLASSIFICATION=exact-upstream-feature-provenance-in-selective-candidate"
+            echo "FUTURE_TASK_FEATURE=$FUTURE_TASK_FEATURE"
+            echo "FUTURE_TASK_PARENT=$FUTURE_TASK_PARENT"
+            echo "FUTURE_TASK_SCOPE=HIVE-123554-future-date-non-medication-task-scheduling"
+            echo "FUTURE_TASK_CLASSIFICATION=exact-upstream-feature-provenance-in-selective-candidate"
             echo "CONTROL_COMMIT=$GITHUB_SHA"
             echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
@@ -361,6 +392,13 @@ jobs:
             "$CARE_VIEW_PATIENTS_HEADER_TEST"
 
       - name: Run targeted multiple-task creation acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          TZ=UTC yarn jest --ci --runInBand --runTestsByPath \
+            "$ADD_EMERGENCY_TASKS_TEST"
+
+      - name: Run targeted future-date scheduling acceptance tests
         shell: bash
         run: |
           set -euo pipefail
