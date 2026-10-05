@@ -38,6 +38,12 @@ jobs:
       TASK_FORM_LINK_STYLE: src/features/DisplayControls/NursingTasks/styles/TaskFormLink.scss
       TASK_FORM_CONSTANTS: src/constants.js
       TASK_FORM_UTILS: src/features/DisplayControls/NursingTasks/utils/NursingTasksUtils.js
+      CARE_INSTRUCTIONS_COMPONENT: src/features/DisplayControls/CareInstructions/components/CareInstructions.jsx
+      CARE_INSTRUCTIONS_STYLE: src/features/DisplayControls/CareInstructions/styles/CareInstructions.scss
+      CARE_INSTRUCTIONS_TEST: src/features/DisplayControls/CareInstructions/tests/CareInstructions.spec.jsx
+      CARE_INSTRUCTIONS_UTILS: src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.jsx
+      CARE_INSTRUCTIONS_UTILS_TEST: src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.test.js
+      CARE_INSTRUCTIONS_MAPPING: src/entries/Dashboard/componentMapping.js
 
     steps:
       - name: Checkout NMHS control branch
@@ -155,6 +161,20 @@ jobs:
 
           test -z "$(git diff --name-only --diff-filter=U)"
 
+          # Care Instructions is a clean parent->feature family. Prove the candidate
+          # carries the exact upstream aggregate bytes for its bounded core paths.
+          for path in \
+            "$CARE_INSTRUCTIONS_COMPONENT" \
+            "$CARE_INSTRUCTIONS_STYLE" \
+            "$CARE_INSTRUCTIONS_TEST" \
+            "$CARE_INSTRUCTIONS_UTILS" \
+            "$CARE_INSTRUCTIONS_UTILS_TEST" \
+            "$CARE_INSTRUCTIONS_MAPPING"; do
+            git cat-file -e "$UPSTREAM_FEATURE:$path"
+            git show "$UPSTREAM_FEATURE:$path" > /tmp/upstream-care-instructions-file
+            diff -u /tmp/upstream-care-instructions-file "$path"
+          done
+
           # Preserve the reviewed NMHS snapshot for this bounded stop/unstop gate.
           # The obsolete cancel snapshot was intentionally removed after replacing it with a deterministic behavior assertion.
           git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_PRESERVE"
@@ -219,6 +239,8 @@ jobs:
             echo "UPSTREAM_FEATURE=$UPSTREAM_FEATURE"
             echo "TASK_FORM_FEATURE=$TASK_FORM_FEATURE"
             echo "TASK_FORM_SCOPE=BAH-4970-slider-link-core"
+            echo "CARE_INSTRUCTIONS_SOURCE=$UPSTREAM_FEATURE"
+            echo "CARE_INSTRUCTIONS_SCOPE=component-style-utils-tests-dashboard-mapping"
             echo "CONTROL_COMMIT=$GITHUB_SHA"
             echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
@@ -249,6 +271,14 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Run targeted Care Instructions acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          TZ=UTC yarn jest --ci --runInBand --runTestsByPath \
+            "$CARE_INSTRUCTIONS_TEST" \
+            "$CARE_INSTRUCTIONS_UTILS_TEST"
 
       - name: Build selective candidate
         run: yarn build
