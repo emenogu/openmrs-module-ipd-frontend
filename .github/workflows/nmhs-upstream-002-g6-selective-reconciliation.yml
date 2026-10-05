@@ -23,6 +23,7 @@ jobs:
       HARNESS_RECONCILIATION: src/setupTests.js
       NOTIFICATION_RECONCILIATION: src/components/Notification/Notification.jsx
       EN_LOCALE_RECONCILIATION: public/i18n/locale_en.json
+      CARE_VIEW_RECONCILIATION: src/entries/CareViewDashboard/CareViewDashboard.jsx
       NOTIFICATION_SNAPSHOT: src/components/Notification/__snapshots__/Notification.spec.jsx.snap
       TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
       TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
@@ -41,11 +42,12 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 7
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 8
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$EN_LOCALE_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$CARE_VIEW_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_SNAPSHOT" /tmp/control-delta.txt
           grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
@@ -67,6 +69,10 @@ jobs:
           # Notification reconciliation must be the exact upstream feature-state file.
           git show "$UPSTREAM_FEATURE:$NOTIFICATION_RECONCILIATION" > /tmp/upstream-notification.jsx
           diff -u /tmp/upstream-notification.jsx "$NOTIFICATION_RECONCILIATION"
+
+          # Care View reconciliation must be the exact upstream feature-state file.
+          git show "$UPSTREAM_FEATURE:$CARE_VIEW_RECONCILIATION" > /tmp/upstream-care-view.jsx
+          diff -u /tmp/upstream-care-view.jsx "$CARE_VIEW_RECONCILIATION"
 
           # Preserve exact upstream source for bounded stopped-task fixture extraction.
           git show "$UPSTREAM_FEATURE:$TASK_MOCK_RECONCILIATION" > /tmp/upstream-task-mock.js
@@ -91,7 +97,7 @@ jobs:
           git diff --name-only --diff-filter=U | sort > g6-evidence/conflicts.txt
           echo '=== CONFLICT PATHS ==='
           cat g6-evidence/conflicts.txt
-          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 11
+          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 10
 
           # Resolve every conflict by restoring the accepted NMHS file exactly.
           while IFS= read -r path; do
@@ -120,7 +126,7 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 44
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 45
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
@@ -177,6 +183,8 @@ jobs:
             echo "NOTIFICATION_RECONCILIATION=$NOTIFICATION_RECONCILIATION"
             echo "NOTIFICATION_SOURCE=$UPSTREAM_FEATURE:$NOTIFICATION_RECONCILIATION"
             echo "EN_LOCALE_RECONCILIATION=$EN_LOCALE_RECONCILIATION"
+            echo "CARE_VIEW_RECONCILIATION=$CARE_VIEW_RECONCILIATION"
+            echo "CARE_VIEW_SOURCE=$UPSTREAM_FEATURE:$CARE_VIEW_RECONCILIATION"
             echo "NOTIFICATION_SNAPSHOT=$NOTIFICATION_SNAPSHOT"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
