@@ -330,7 +330,8 @@ describe("UpdateNursingTasksSlider", function () {
   });
 
   it("should close the slider on click of cancel button when no changes are made", function () {
-    const { container } = render(
+    const updateNursingTasksSlider = jest.fn();
+    render(
       <IPDContext.Provider
         value={{
           config: mockConfig,
@@ -341,7 +342,7 @@ describe("UpdateNursingTasksSlider", function () {
         <UpdateNursingTasks
           medicationTasks={mockMedicationTasks}
           groupSlotsByOrderId={mockGroupSlotsByOrderId}
-          updateNursingTasksSlider={jest.fn}
+          updateNursingTasksSlider={updateNursingTasksSlider}
           patientId="test_patient_uuid"
           providerId="test_provider_uuid"
           setShowNotification={mockSetShowNotification}
@@ -352,7 +353,7 @@ describe("UpdateNursingTasksSlider", function () {
     );
     const cancelButton = screen.getAllByText("Cancel")[1];
     fireEvent.click(cancelButton);
-    expect(container).toMatchSnapshot();
+    expect(updateNursingTasksSlider).toHaveBeenCalledWith(false);
   });
 
   it("should render confirmation modal on click of cancel button when changes are made", function () {
