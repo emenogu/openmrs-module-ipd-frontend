@@ -15,6 +15,7 @@ import {
   mockConfigFor12HourFormat,
 } from "../../../../utils/CommonUtils";
 import { IPDContext } from "../../../../context/IPDContext";
+import { IntlProvider } from "react-intl";
 
 describe("TaskTile", () => {
   beforeEach(() => {
