@@ -136,12 +136,13 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 48
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 47
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
+          grep -Fxv "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" /tmp/nonconflict-paths.txt > /tmp/nonconflict-paths-reviewed.txt
           {
-            cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
+            cat /tmp/nonconflict-paths-reviewed.txt
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
