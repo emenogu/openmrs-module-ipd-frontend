@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
+import { IntlProvider } from "react-intl";
 import UpdateNursingTasks from "../components/UpdateNursingTasks";
 import {
   mockMedicationTasks,
@@ -719,7 +720,98 @@ describe("UpdateNursingTasksSlider", function () {
     expect(screen.getByText("Please confirm your PRN task")).toBeTruthy();
   });
 
-  it.only("should show toggle disabled when privileges are not preset", function () {
+
+  it("should show Stop Task for non-medication tasks when enabled", () => {
+    const { container } = render(
+      <IntlProvider locale="en">
+        <IPDContext.Provider
+          value={{
+            config: { ...mockConfig, enableStopTasks: true },
+            handleAuditEvent: mockHandleAuditLogEvent,
+            currentUser: mockUserWithAllRequiredPrivileges,
+          }}
+        >
+          <UpdateNursingTasks
+            medicationTasks={[mockNonMedicationTileData[0]]}
+            groupSlotsByOrderId={mockGroupSlotsByOrderId}
+            updateNursingTasksSlider={jest.fn}
+            patientId="test_patient_uuid"
+            providerId="test_provider_uuid"
+            setShowNotification={mockSetShowNotification}
+            setNotificationMessage={mockSetNotificationMessage}
+            setNotificationStatus={mockSetNotificationStatus}
+          />
+        </IPDContext.Provider>
+      </IntlProvider>
+    );
+
+    const overflowMenuButton = container.querySelectorAll(".bx--overflow-menu")[0];
+    fireEvent.click(overflowMenuButton);
+    expect(screen.getByText("Stop Task")).toBeTruthy();
+  });
+
+  it("should transition Stop Task to Unstop Task", () => {
+    const { container } = render(
+      <IntlProvider locale="en">
+        <IPDContext.Provider
+          value={{
+            config: { ...mockConfig, enableStopTasks: true },
+            handleAuditEvent: mockHandleAuditLogEvent,
+            currentUser: mockUserWithAllRequiredPrivileges,
+          }}
+        >
+          <UpdateNursingTasks
+            medicationTasks={[mockNonMedicationTileData[0]]}
+            groupSlotsByOrderId={mockGroupSlotsByOrderId}
+            updateNursingTasksSlider={jest.fn}
+            patientId="test_patient_uuid"
+            providerId="test_provider_uuid"
+            setShowNotification={mockSetShowNotification}
+            setNotificationMessage={mockSetNotificationMessage}
+            setNotificationStatus={mockSetNotificationStatus}
+          />
+        </IPDContext.Provider>
+      </IntlProvider>
+    );
+
+    const overflowMenuButton = container.querySelectorAll(".bx--overflow-menu")[0];
+    fireEvent.click(overflowMenuButton);
+    fireEvent.click(screen.getByText("Stop Task"));
+    fireEvent.click(overflowMenuButton);
+    expect(screen.getByText("Unstop Task")).toBeTruthy();
+    expect(screen.queryByText("Stop Task")).toBeNull();
+  });
+
+  it("should not show Stop Task when enableStopTasks is false", () => {
+    const { container } = render(
+      <IntlProvider locale="en">
+        <IPDContext.Provider
+          value={{
+            config: { ...mockConfig, enableStopTasks: false },
+            handleAuditEvent: mockHandleAuditLogEvent,
+            currentUser: mockUserWithAllRequiredPrivileges,
+          }}
+        >
+          <UpdateNursingTasks
+            medicationTasks={[mockNonMedicationTileData[0]]}
+            groupSlotsByOrderId={mockGroupSlotsByOrderId}
+            updateNursingTasksSlider={jest.fn}
+            patientId="test_patient_uuid"
+            providerId="test_provider_uuid"
+            setShowNotification={mockSetShowNotification}
+            setNotificationMessage={mockSetNotificationMessage}
+            setNotificationStatus={mockSetNotificationStatus}
+          />
+        </IPDContext.Provider>
+      </IntlProvider>
+    );
+
+    const overflowMenuButton = container.querySelectorAll(".bx--overflow-menu")[0];
+    fireEvent.click(overflowMenuButton);
+    expect(screen.queryByText("Stop Task")).toBeNull();
+  });
+
+  it("should show toggle disabled when privileges are not preset", function () {
     const { queryAllByTestId, container } = render(
       <IPDContext.Provider
         value={{
