@@ -139,7 +139,7 @@ jobs:
 
           comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
           {
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION"
           } | sort > /tmp/expected-applied-conflicts.txt
           diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
