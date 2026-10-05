@@ -44,6 +44,16 @@ jobs:
       CARE_INSTRUCTIONS_UTILS: src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.jsx
       CARE_INSTRUCTIONS_UTILS_TEST: src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.test.js
       CARE_INSTRUCTIONS_MAPPING: src/entries/Dashboard/componentMapping.js
+      CARE_VIEW_SUMMARY_COMPONENT: src/features/CareViewPatientsSummary/components/CareViewPatientsSummary.jsx
+      CARE_VIEW_SUMMARY_HEADER: src/features/CareViewPatientsSummary/components/Header.jsx
+      CARE_VIEW_SUMMARY_PATIENT_CELL: src/features/CareViewPatientsSummary/components/PatientDetailsCell.jsx
+      CARE_VIEW_SUMMARY_STYLE: src/features/CareViewPatientsSummary/styles/CareViewPatientsSummary.scss
+      CARE_VIEW_SUMMARY_TEST: src/features/CareViewPatientsSummary/tests/CareViewPatientsSummary.spec.jsx
+      CARE_VIEW_SUMMARY_MOCK: src/features/CareViewPatientsSummary/tests/CareViewPatientsSummaryMock.js
+      CARE_VIEW_SUMMARY_HEADER_TEST: src/features/CareViewPatientsSummary/tests/Header.spec.jsx
+      CARE_VIEW_SUMMARY_PATIENT_CELL_TEST: src/features/CareViewPatientsSummary/tests/PatientDetailsCell.spec.jsx
+      CARE_VIEW_PATIENTS_TEST: src/features/CareViewPatients/test/CareViewPatients.spec.jsx
+      CARE_VIEW_PATIENTS_HEADER_TEST: src/features/CareViewPatients/test/CareViewPatientsHeader.spec.jsx
 
     steps:
       - name: Checkout NMHS control branch
@@ -175,6 +185,30 @@ jobs:
             diff -u /tmp/upstream-care-instructions-file "$path"
           done
 
+          # Nurse acknowledgement / Care View summary family is also a clean
+          # parent->feature delta. Prove exact upstream bytes in the temporary candidate.
+          for path in \
+            "$CARE_VIEW_SUMMARY_COMPONENT" \
+            "$CARE_VIEW_SUMMARY_HEADER" \
+            "$CARE_VIEW_SUMMARY_PATIENT_CELL" \
+            "$CARE_VIEW_SUMMARY_STYLE" \
+            "$CARE_VIEW_SUMMARY_TEST" \
+            "$CARE_VIEW_SUMMARY_MOCK" \
+            "$CARE_VIEW_SUMMARY_HEADER_TEST" \
+            "$CARE_VIEW_SUMMARY_PATIENT_CELL_TEST" \
+            "$CARE_VIEW_PATIENTS_TEST" \
+            "$CARE_VIEW_PATIENTS_HEADER_TEST"; do
+            git cat-file -e "$UPSTREAM_FEATURE:$path"
+            git show "$UPSTREAM_FEATURE:$path" > /tmp/upstream-care-view-file
+            diff -u /tmp/upstream-care-view-file "$path"
+          done
+
+          # Conflicted/reconciled shared seams are semantic assertions, not wholesale replacement.
+          grep -Fq 'export const TASK_FILTER_HEADER' src/constants.js
+          grep -Fq '"ALL":' "$EN_LOCALE_RECONCILIATION"
+          grep -Fq '"NEW":' "$EN_LOCALE_RECONCILIATION"
+          grep -Fq '"PENDING":' "$EN_LOCALE_RECONCILIATION"
+
           # Preserve the reviewed NMHS snapshot for this bounded stop/unstop gate.
           # The obsolete cancel snapshot was intentionally removed after replacing it with a deterministic behavior assertion.
           git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_PRESERVE"
@@ -241,6 +275,8 @@ jobs:
             echo "TASK_FORM_SCOPE=BAH-4970-slider-link-core"
             echo "CARE_INSTRUCTIONS_SOURCE=$UPSTREAM_FEATURE"
             echo "CARE_INSTRUCTIONS_SCOPE=component-style-utils-tests-dashboard-mapping"
+            echo "CARE_VIEW_ACK_SOURCE=$UPSTREAM_FEATURE"
+            echo "CARE_VIEW_ACK_SCOPE=nurse-acknowledgement-filter-new-pending-previous-shift"
             echo "CONTROL_COMMIT=$GITHUB_SHA"
             echo "HARNESS_RECONCILIATION=$HARNESS_RECONCILIATION"
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
@@ -279,6 +315,17 @@ jobs:
           TZ=UTC yarn jest --ci --runInBand --runTestsByPath \
             "$CARE_INSTRUCTIONS_TEST" \
             "$CARE_INSTRUCTIONS_UTILS_TEST"
+
+      - name: Run targeted Care View acknowledgement acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          TZ=UTC yarn jest --ci --runInBand --runTestsByPath \
+            "$CARE_VIEW_SUMMARY_TEST" \
+            "$CARE_VIEW_SUMMARY_HEADER_TEST" \
+            "$CARE_VIEW_SUMMARY_PATIENT_CELL_TEST" \
+            "$CARE_VIEW_PATIENTS_TEST" \
+            "$CARE_VIEW_PATIENTS_HEADER_TEST"
 
       - name: Build selective candidate
         run: yarn build
