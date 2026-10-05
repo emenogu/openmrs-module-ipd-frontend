@@ -1,0 +1,186 @@
+name: NMHS UPSTREAM-002 G6 Frontend Immutable Publication
+
+on:
+  push:
+    branches:
+      - upstream-002-g6-frontend-publication-v1
+    paths:
+      - nmhs-publication/upstream-002-g6.Dockerfile
+      - .github/workflows/nmhs-upstream-002-g6-frontend-publication.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+env:
+  CONTROL_COMMIT: f8177a8fc0324652c8335ee09590aa0c39fa0ab3
+  VALIDATION_RUN: "37334524292"
+  ARTIFACT_ID: "11356495606"
+  ARTIFACT_SHA256: a30594799d53c1d8444b0c19bb248782dc102511fad593f30f403140e553acb3
+  BASE_IMAGE: ghcr.io/emenogu/nmhs-modern-ipd@sha256:3ff4baef4ab19e957d9930b0d54f2ed0e161d8b003e7e5e0ad333c5c5bf0b3b7
+  IMAGE_NAME: ghcr.io/emenogu/nmhs-modern-ipd
+  IMAGE_TAG: up2-g6-f8177a8f-a3059479
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout publication control
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify publication control scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base --is-ancestor "$CONTROL_COMMIT" HEAD; echo $?)" = "0"
+          test -f nmhs-publication/upstream-002-g6.Dockerfile
+          grep -Fq "FROM $BASE_IMAGE" nmhs-publication/upstream-002-g6.Dockerfile
+          git diff --check "$CONTROL_COMMIT" HEAD
+
+      - name: Verify validated frontend run and artifact metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo = "emenogu/openmrs-module-ipd-frontend"
+          run_id = 37334524292
+          artifact_id = 11356495606
+          control = "f8177a8fc0324652c8335ee09590aa0c39fa0ab3"
+          token = os.environ["GH_TOKEN"]
+
+          def api(path):
+              req = urllib.request.Request(
+                  "https://api.github.com" + path,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(req) as r:
+                  return json.load(r)
+
+          run = api(f"/repos/{repo}/actions/runs/{run_id}")
+          assert run["status"] == "completed"
+          assert run["conclusion"] == "success"
+          assert run["head_sha"] == control
+
+          artifacts = api(f"/repos/{repo}/actions/runs/{run_id}/artifacts")
+          found = [a for a in artifacts["artifacts"] if a["id"] == artifact_id]
+          assert len(found) == 1
+          a = found[0]
+          assert a["expired"] is False
+          assert a["digest"] == "sha256:a30594799d53c1d8444b0c19bb248782dc102511fad593f30f403140e553acb3"
+          print("VALIDATED_ARTIFACT_METADATA=PASS")
+          PY
+
+      - name: Download and verify exact validated artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          url="https://api.github.com/repos/emenogu/openmrs-module-ipd-frontend/actions/artifacts/$ARTIFACT_ID/zip"
+          curl --fail --silent --show-error --location             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "$url" -o "$RUNNER_TEMP/g6.zip"
+
+          test "$(sha256sum "$RUNNER_TEMP/g6.zip" | awk '{print $1}')" = "$ARTIFACT_SHA256"
+
+          mkdir -p "$RUNNER_TEMP/g6"
+          python3 - "$RUNNER_TEMP/g6.zip" "$RUNNER_TEMP/g6" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              z.extractall(sys.argv[2])
+          PY
+
+          cd "$RUNNER_TEMP/g6"
+          test -f g6-evidence/PROVENANCE.txt
+          test -f g6-evidence/DIST_SHA256SUMS
+          grep -Fxq "CONTROL_COMMIT=$CONTROL_COMMIT" g6-evidence/PROVENANCE.txt
+          grep -Fxq "UPSTREAM_FEATURE=6afeda361e3e321e7dd3d764016d1d5941ce7c6c" g6-evidence/PROVENANCE.txt
+          sha256sum -c g6-evidence/DIST_SHA256SUMS
+          test -f dist/federation/remoteEntry.js
+
+      - name: Prepare runtime stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ipd-stage"
+          cp -a "$RUNNER_TEMP/g6/dist/federation/." "$RUNNER_TEMP/ipd-stage/"
+          find "$RUNNER_TEMP/ipd-stage" -type d -exec chmod 0755 {} +
+          find "$RUNNER_TEMP/ipd-stage" -type f -exec chmod 0644 {} +
+
+      - name: Authenticate GHCR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Fail closed if destination tag exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker pull "$IMAGE_NAME:$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "STOP: destination tag already exists"
+            exit 1
+          fi
+
+      - name: Build exact runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$BASE_IMAGE"
+          context="$RUNNER_TEMP/ipd-context"
+          mkdir -p "$context/runtime-stage"
+          cp nmhs-publication/upstream-002-g6.Dockerfile "$context/Dockerfile"
+          cp -a "$RUNNER_TEMP/ipd-stage/." "$context/runtime-stage/"
+
+          docker build             --platform linux/amd64             --pull=false             --network=none             --build-arg "CONTROL_COMMIT=$CONTROL_COMMIT"             --build-arg "VALIDATION_RUN=$VALIDATION_RUN"             --build-arg "ARTIFACT_ID=$ARTIFACT_ID"             --build-arg "ARTIFACT_SHA256=$ARTIFACT_SHA256"             -t "$IMAGE_NAME:$IMAGE_TAG"             "$context"
+
+      - name: Publish immutable candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/push.log"
+          docker push "$IMAGE_NAME:$IMAGE_TAG" | tee "$log"
+          digest="$(sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' "$log" | tail -n 1)"
+          test -n "$digest"
+          echo "PUBLISHED_DIGEST=$digest" >> "$GITHUB_ENV"
+
+      - name: Pullback byte-equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="$IMAGE_NAME@$PUBLISHED_DIGEST"
+          docker pull "$ref"
+          cid="$(docker create "$ref")"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          mkdir -p "$RUNNER_TEMP/pullback"
+          docker cp "$cid:/usr/local/apache2/htdocs/ipd/." "$RUNNER_TEMP/pullback/"
+
+          python3 - "$RUNNER_TEMP/ipd-stage" "$RUNNER_TEMP/pullback" <<'PY'
+          from pathlib import Path
+          import hashlib, sys
+          def inv(root):
+              root=Path(root)
+              return {
+                  p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in root.rglob("*") if p.is_file()
+              }
+          if inv(sys.argv[1]) != inv(sys.argv[2]):
+              raise SystemExit("STOP: G6 IPD pullback mismatch")
+          print("IPD_PULLBACK=PASS")
+          PY
+
+          echo "IMMUTABLE_REFERENCE=$ref"
+          echo "No rehearsal deployment, promotion, production mutation, or upstream push performed."
