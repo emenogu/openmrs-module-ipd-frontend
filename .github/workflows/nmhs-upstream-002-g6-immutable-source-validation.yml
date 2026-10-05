@@ -128,7 +128,7 @@ jobs:
           echo "CHECKPOINT stopped-task-fixture PASS"
 
           # Critical source feature markers must now exist in the actual immutable branch tree.
-          grep -Fq 'TaskFormLink' src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
+          grep -Fq 'TaskFormLink' src/features/DisplayControls/NursingTasks/components/UpdateNursingTasks.jsx
           grep -Fq 'enableStopTasks' src/features/DisplayControls/NursingTasks/components/UpdateNursingTasks.jsx
           grep -Fq 'saveBulkNonMedicationTasks' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
           grep -Fq 'enableDateSelection: true' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
