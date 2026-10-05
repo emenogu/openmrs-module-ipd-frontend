@@ -22,6 +22,8 @@ jobs:
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
       HARNESS_RECONCILIATION: src/setupTests.js
       NOTIFICATION_RECONCILIATION: src/components/Notification/Notification.jsx
+      EN_LOCALE_RECONCILIATION: public/i18n/locale_en.json
+      NOTIFICATION_SNAPSHOT: src/components/Notification/__snapshots__/Notification.spec.jsx.snap
       TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
       TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
@@ -39,10 +41,12 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 5
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 7
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$EN_LOCALE_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$NOTIFICATION_SNAPSHOT" /tmp/control-delta.txt
           grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
 
@@ -93,7 +97,7 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              "$TASK_TILE_RECONCILIATION")
+              "$TASK_TILE_RECONCILIATION"|"$EN_LOCALE_RECONCILIATION")
                 git restore --source=HEAD --staged --worktree -- "$path"
                 ;;
               "$TASK_MOCK_RECONCILIATION")
@@ -116,18 +120,18 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 42
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 44
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
             cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
           comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
           {
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION"
           } | sort > /tmp/expected-applied-conflicts.txt
           diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
@@ -138,7 +142,7 @@ jobs:
           : > g6-evidence/conflict-preservation-sha256.txt
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            if [ "$path" = "$TASK_TILE_RECONCILIATION" ]; then
+            if [ "$path" = "$TASK_TILE_RECONCILIATION" ] || [ "$path" = "$EN_LOCALE_RECONCILIATION" ]; then
               after="$(sha256sum "$path" | awk '{print $1}')"
               branch_sha="$(git show HEAD:"$path" | sha256sum | awk '{print $1}')"
               test "$after" = "$branch_sha"
@@ -172,6 +176,8 @@ jobs:
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
             echo "NOTIFICATION_RECONCILIATION=$NOTIFICATION_RECONCILIATION"
             echo "NOTIFICATION_SOURCE=$UPSTREAM_FEATURE:$NOTIFICATION_RECONCILIATION"
+            echo "EN_LOCALE_RECONCILIATION=$EN_LOCALE_RECONCILIATION"
+            echo "NOTIFICATION_SNAPSHOT=$NOTIFICATION_SNAPSHOT"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
             echo "APPLIED_RECONCILED_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
