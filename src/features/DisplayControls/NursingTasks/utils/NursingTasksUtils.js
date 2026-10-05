@@ -302,6 +302,7 @@ export const ExtractNonMedicationTasks = (
       taskType,
       creator,
       executionEndTime,
+      input,
     } = nonMedicationTask;
     const startTimeInDate = new Date(requestedStartTime);
     const taskInfo = {
@@ -326,6 +327,7 @@ export const ExtractNonMedicationTasks = (
       token,
       taskType,
       creator,
+      input,
     };
 
     if (
@@ -407,3 +409,29 @@ export const disableDoneTogglePostNextTaskTime = (
     currentTimeInEpoch >= taskWithJustGreaterTime.startTimeInEpochSeconds
   );
 };
+
+export const getLatestFormUuid = (formName, allFormsSummary) => {
+  if (!formName || !allFormsSummary || !allFormsSummary.length) return null;
+  const matches = allFormsSummary.filter((form) => form.name === formName);
+  if (!matches.length) return null;
+  const compareVersions = (a, b) => {
+    const aParts = a.version.split(".").map(Number);
+    const bParts = b.version.split(".").map(Number);
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const aPart = aParts[i] || 0;
+      const bPart = bParts[i] || 0;
+      if (bPart !== aPart) return bPart - aPart;
+    }
+    return 0;
+  };
+  return matches.sort(compareVersions)[0].uuid;
+};
+
+export const getFormNameFromTaskInput = (input, formTaskInputConceptUuid) => {
+  if (!Array.isArray(input) || !formTaskInputConceptUuid) return null;
+  const formInput = input.find(
+    (taskInput) => taskInput?.type?.uuid === formTaskInputConceptUuid
+  );
+  return formInput?.valueText || null;
+};
+
