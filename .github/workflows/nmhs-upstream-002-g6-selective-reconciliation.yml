@@ -129,7 +129,7 @@ jobs:
           test "$(git rev-parse FETCH_HEAD)" = "$FUTURE_TASK_FEATURE"
           test "$(git rev-parse "$FUTURE_TASK_FEATURE^")" = "$FUTURE_TASK_PARENT"
           git diff --name-only "$FUTURE_TASK_PARENT" "$FUTURE_TASK_FEATURE" | sort > /tmp/future-task-paths.txt
-          test "$(wc -l < /tmp/future-task-paths.txt)" -eq 17
+          test "$(wc -l < /tmp/future-task-paths.txt)" -eq 18
           grep -Fxq "$ADD_EMERGENCY_TASKS" /tmp/future-task-paths.txt
           grep -Fxq "$ADD_EMERGENCY_TASKS_TEST" /tmp/future-task-paths.txt
           grep -Fxq "$DATE_TIME_UTILS" /tmp/future-task-paths.txt
