@@ -21,6 +21,9 @@ jobs:
       UPSTREAM_FEATURE: 6afeda361e3e321e7dd3d764016d1d5941ce7c6c
       CONTROL_WORKFLOW: .github/workflows/nmhs-upstream-002-g6-selective-reconciliation.yml
       HARNESS_RECONCILIATION: src/setupTests.js
+      TASK_TILE_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
+      TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
+      TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
 
     steps:
       - name: Checkout NMHS control branch
@@ -35,9 +38,12 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 2
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 5
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$TASK_MOCK_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
         shell: bash
@@ -78,11 +84,18 @@ jobs:
           # Resolve every conflict by restoring the accepted NMHS file exactly.
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
-              git restore --source="$ACCEPTED_BASE" --staged --worktree -- "$path"
-            else
-              git rm -f --ignore-unmatch -- "$path"
-            fi
+            case "$path" in
+              "$TASK_TILE_RECONCILIATION"|"$TASK_MOCK_RECONCILIATION")
+                git restore --source=HEAD --staged --worktree -- "$path"
+                ;;
+              *)
+                if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
+                  git restore --source="$ACCEPTED_BASE" --staged --worktree -- "$path"
+                else
+                  git rm -f --ignore-unmatch -- "$path"
+                fi
+                ;;
+            esac
           done < g6-evidence/conflicts.txt
 
           test -z "$(git diff --name-only --diff-filter=U)"
@@ -90,15 +103,20 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 39
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 41
 
-          comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > g6-evidence/expected-applied-paths.txt
+          comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
+          {
+            cat /tmp/nonconflict-paths.txt
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+          } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
-          if comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt | grep -q .; then
-            echo 'STOP: a conflict path leaked into the selective candidate' >&2
-            exit 1
-          fi
+          comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
+          {
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+          } | sort > /tmp/expected-applied-conflicts.txt
+          diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
       - name: Prove conflicted NMHS files are byte-identical to accepted base
         shell: bash
@@ -131,7 +149,8 @@ jobs:
             echo "HARNESS_SOURCE=$UPSTREAM_FEATURE:$HARNESS_RECONCILIATION"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
-            echo "APPLIED_NONCONFLICT_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
+            echo "APPLIED_RECONCILED_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
+            echo "RECONCILED_CONFLICT_PATHS=$TASK_TILE_RECONCILIATION,$TASK_MOCK_RECONCILIATION"
           } > g6-evidence/PROVENANCE.txt
           cp /tmp/upstream-paths.txt g6-evidence/upstream-paths.txt
           cat g6-evidence/PROVENANCE.txt
