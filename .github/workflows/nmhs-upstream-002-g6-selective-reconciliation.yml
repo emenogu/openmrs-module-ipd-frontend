@@ -31,6 +31,7 @@ jobs:
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
       UPDATE_NURSING_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/UpdateNursingTasks.jsx
       UPDATE_NURSING_TEST_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/UpdateNursingTasks.spec.jsx
+      UPDATE_NURSING_SNAPSHOT_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/__snapshots__/UpdateNursingTasks.spec.jsx.snap
 
     steps:
       - name: Checkout NMHS control branch
@@ -45,7 +46,7 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 11
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 12
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
@@ -57,6 +58,7 @@ jobs:
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_TEST_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
         shell: bash
@@ -127,6 +129,9 @@ jobs:
             esac
           done < g6-evidence/conflicts.txt
 
+          # Preserve reviewed NMHS full-suite snapshot IDs; upstream clean cherry-pick carries stale generated IDs.
+          git restore --source=HEAD --staged --worktree -- "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION"
+
           test -z "$(git diff --name-only --diff-filter=U)"
 
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
@@ -137,7 +142,7 @@ jobs:
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
             cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION" "$UPDATE_NURSING_SNAPSHOT_RECONCILIATION" "$NOTIFICATION_SNAPSHOT"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
@@ -195,6 +200,7 @@ jobs:
             echo "UPDATE_NURSING_RECONCILIATION=$UPDATE_NURSING_RECONCILIATION"
             echo "UPDATE_NURSING_SCOPE=stop-unstop-only"
             echo "UPDATE_NURSING_TEST_RECONCILIATION=$UPDATE_NURSING_TEST_RECONCILIATION"
+            echo "UPDATE_NURSING_SNAPSHOT_RECONCILIATION=$UPDATE_NURSING_SNAPSHOT_RECONCILIATION"
             echo "NOTIFICATION_SNAPSHOT=$NOTIFICATION_SNAPSHOT"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
