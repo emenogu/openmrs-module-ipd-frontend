@@ -79,13 +79,13 @@ jobs:
           git diff --name-only --diff-filter=U | sort > g6-evidence/conflicts.txt
           echo '=== CONFLICT PATHS ==='
           cat g6-evidence/conflicts.txt
-          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 12
+          test "$(wc -l < g6-evidence/conflicts.txt)" -eq 11
 
           # Resolve every conflict by restoring the accepted NMHS file exactly.
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              "$TASK_TILE_RECONCILIATION"|"$TASK_MOCK_RECONCILIATION")
+              "$TASK_TILE_RECONCILIATION")
                 git restore --source=HEAD --staged --worktree -- "$path"
                 ;;
               *)
@@ -108,13 +108,13 @@ jobs:
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
             cat /tmp/nonconflict-paths.txt
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION"
           } | sort -u > g6-evidence/expected-applied-paths.txt
           diff -u g6-evidence/expected-applied-paths.txt g6-evidence/applied-paths.txt
 
           comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
           {
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION"
           } | sort > /tmp/expected-applied-conflicts.txt
           diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
@@ -125,7 +125,12 @@ jobs:
           : > g6-evidence/conflict-preservation-sha256.txt
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            if git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
+            if [ "$path" = "$TASK_TILE_RECONCILIATION" ]; then
+              after="$(sha256sum "$path" | awk '{print $1}')"
+              branch_sha="$(git show HEAD:"$path" | sha256sum | awk '{print $1}')"
+              test "$after" = "$branch_sha"
+              printf 'RECONCILED %s  %s\n' "$after" "$path" >> g6-evidence/conflict-preservation-sha256.txt
+            elif git cat-file -e "$ACCEPTED_BASE:$path" 2>/dev/null; then
               before="$(git show "$ACCEPTED_BASE:$path" | sha256sum | awk '{print $1}')"
               after="$(sha256sum "$path" | awk '{print $1}')"
               test "$before" = "$after"
@@ -150,7 +155,7 @@ jobs:
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
             echo "APPLIED_RECONCILED_PATHS=$(wc -l < g6-evidence/applied-paths.txt)"
-            echo "RECONCILED_CONFLICT_PATHS=$TASK_TILE_RECONCILIATION,$TASK_MOCK_RECONCILIATION"
+            echo "RECONCILED_CONFLICT_PATHS=$TASK_TILE_RECONCILIATION"
           } > g6-evidence/PROVENANCE.txt
           cp /tmp/upstream-paths.txt g6-evidence/upstream-paths.txt
           cat g6-evidence/PROVENANCE.txt
