@@ -152,6 +152,21 @@ export const DAEMON_USER = {
   uuid: "A4F30A1B-5EB9-11DF-A648-37A07F9C90FB",
 };
 
+export const CONCEPT_SET_GROUP_NAME = "observations";
+export const CLINICAL_FORM_URL = (
+  patientUuid,
+  formUuid,
+  conceptSetGroupName = CONCEPT_SET_GROUP_NAME
+) =>
+  `/bahmni/clinical/index.html#/default/patient/${patientUuid}/dashboard/concept-set-group/${conceptSetGroupName}/form/${formUuid}`;
+
+export const TASK_COLORS = {
+  LINK_BLUE: "#0f62fe",
+  STOP_RED: "#FF0000",
+  RELEVANT_DARK: "#393939",
+  NON_RELEVANT_GRAY: "#525252",
+};
+
 export const PRIVILEGE_CONSTANTS = {
   ADT: "Assign Beds",
   EDIT_MEDICATION_TASKS: "Edit Medication Tasks",
