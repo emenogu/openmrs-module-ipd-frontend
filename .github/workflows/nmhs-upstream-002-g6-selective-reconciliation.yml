@@ -30,6 +30,7 @@ jobs:
       TASK_MOCK_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/NursingTasksUtilsMockData.js
       TASK_TEST_COMPAT: src/features/DisplayControls/NursingTasks/tests/TaskTile.spec.jsx
       UPDATE_NURSING_RECONCILIATION: src/features/DisplayControls/NursingTasks/components/UpdateNursingTasks.jsx
+      UPDATE_NURSING_TEST_RECONCILIATION: src/features/DisplayControls/NursingTasks/tests/UpdateNursingTasks.spec.jsx
 
     steps:
       - name: Checkout NMHS control branch
@@ -44,7 +45,7 @@ jobs:
           git cat-file -e "$ACCEPTED_BASE^{commit}"
           git diff --name-only "$ACCEPTED_BASE" HEAD | sort > /tmp/control-delta.txt
           cat /tmp/control-delta.txt
-          test "$(wc -l < /tmp/control-delta.txt)" -eq 10
+          test "$(wc -l < /tmp/control-delta.txt)" -eq 11
           grep -Fxq "$CONTROL_WORKFLOW" /tmp/control-delta.txt
           grep -Fxq "$HARNESS_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$NOTIFICATION_RECONCILIATION" /tmp/control-delta.txt
@@ -55,6 +56,7 @@ jobs:
           grep -Fxq "$TASK_TILE_RECONCILIATION" /tmp/control-delta.txt
           grep -Fxq "$TASK_TEST_COMPAT" /tmp/control-delta.txt
           grep -Fxq "$UPDATE_NURSING_RECONCILIATION" /tmp/control-delta.txt
+          grep -Fxq "$UPDATE_NURSING_TEST_RECONCILIATION" /tmp/control-delta.txt
 
       - name: Fetch exact upstream feature source
         shell: bash
@@ -107,7 +109,7 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              "$TASK_TILE_RECONCILIATION"|"$EN_LOCALE_RECONCILIATION"|"$DASHBOARD_RECONCILIATION"|"$UPDATE_NURSING_RECONCILIATION")
+              "$TASK_TILE_RECONCILIATION"|"$EN_LOCALE_RECONCILIATION"|"$DASHBOARD_RECONCILIATION"|"$UPDATE_NURSING_RECONCILIATION"|"$UPDATE_NURSING_TEST_RECONCILIATION")
                 git restore --source=HEAD --staged --worktree -- "$path"
                 ;;
               "$TASK_MOCK_RECONCILIATION")
@@ -130,7 +132,7 @@ jobs:
           git diff --name-only "$ACCEPTED_BASE" -- . ":(exclude)$CONTROL_WORKFLOW" ":(exclude)$HARNESS_RECONCILIATION" | sort > g6-evidence/applied-paths.txt
           echo '=== APPLIED NON-CONFLICT PATHS ==='
           cat g6-evidence/applied-paths.txt
-          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 47
+          test "$(wc -l < g6-evidence/applied-paths.txt)" -eq 48
 
           comm -23 /tmp/upstream-paths.txt g6-evidence/conflicts.txt > /tmp/nonconflict-paths.txt
           {
@@ -141,7 +143,7 @@ jobs:
 
           comm -12 g6-evidence/conflicts.txt g6-evidence/applied-paths.txt > /tmp/applied-conflicts.txt
           {
-            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION"
+            printf '%s\n' "$TASK_TILE_RECONCILIATION" "$TASK_MOCK_RECONCILIATION" "$EN_LOCALE_RECONCILIATION" "$DASHBOARD_RECONCILIATION" "$UPDATE_NURSING_RECONCILIATION" "$UPDATE_NURSING_TEST_RECONCILIATION"
           } | sort > /tmp/expected-applied-conflicts.txt
           diff -u /tmp/expected-applied-conflicts.txt /tmp/applied-conflicts.txt
 
@@ -152,7 +154,7 @@ jobs:
           : > g6-evidence/conflict-preservation-sha256.txt
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            if [ "$path" = "$TASK_TILE_RECONCILIATION" ] || [ "$path" = "$EN_LOCALE_RECONCILIATION" ] || [ "$path" = "$DASHBOARD_RECONCILIATION" ] || [ "$path" = "$UPDATE_NURSING_RECONCILIATION" ]; then
+            if [ "$path" = "$TASK_TILE_RECONCILIATION" ] || [ "$path" = "$EN_LOCALE_RECONCILIATION" ] || [ "$path" = "$DASHBOARD_RECONCILIATION" ] || [ "$path" = "$UPDATE_NURSING_RECONCILIATION" ] || [ "$path" = "$UPDATE_NURSING_TEST_RECONCILIATION" ]; then
               after="$(sha256sum "$path" | awk '{print $1}')"
               branch_sha="$(git show HEAD:"$path" | sha256sum | awk '{print $1}')"
               test "$after" = "$branch_sha"
@@ -192,6 +194,7 @@ jobs:
             echo "DASHBOARD_RECONCILIATION=$DASHBOARD_RECONCILIATION"
             echo "UPDATE_NURSING_RECONCILIATION=$UPDATE_NURSING_RECONCILIATION"
             echo "UPDATE_NURSING_SCOPE=stop-unstop-only"
+            echo "UPDATE_NURSING_TEST_RECONCILIATION=$UPDATE_NURSING_TEST_RECONCILIATION"
             echo "NOTIFICATION_SNAPSHOT=$NOTIFICATION_SNAPSHOT"
             echo "UPSTREAM_CHANGED_PATHS=$(wc -l < /tmp/upstream-paths.txt)"
             echo "CONFLICT_PATHS=$(wc -l < g6-evidence/conflicts.txt)"
