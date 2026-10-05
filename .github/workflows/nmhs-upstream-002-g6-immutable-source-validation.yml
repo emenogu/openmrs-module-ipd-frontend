@@ -79,11 +79,13 @@ jobs:
             after="$(sha256sum "$p" | awk '{print $1}')"
             test "$before" = "$after"
           done < /tmp/preserved-conflicts.txt
+          echo "CHECKPOINT preserved-conflicts PASS"
 
           # Optional locale files remain intentionally absent.
           while IFS= read -r p; do
             test ! -e "$p"
           done < /tmp/absent-locales.txt
+          echo "CHECKPOINT absent-locales PASS"
 
           # All clean aggregate paths except the one deliberate TaskTile test 3-way merge
           # are exact upstream bytes. The stopped-task mock is a documented bounded reconciliation.
@@ -94,6 +96,7 @@ jobs:
             git show "$UPSTREAM:$p" > /tmp/upstream-file
             diff -u /tmp/upstream-file "$p"
           done < /tmp/exact-upstream-paths.txt
+          echo "CHECKPOINT exact-upstream-paths PASS"
 
           # TaskTile test combines NMHS compatibility behavior with the exact upstream stopped-task delta.
           grep -Fq 'mockStoppedNonMedicationTileData' "$TASK_TILE_TEST"
@@ -101,6 +104,7 @@ jobs:
           grep -Fq 'should render stopped icon when non-medication task status is Stopped' "$TASK_TILE_TEST"
           grep -Fq 'expect(getByText("16:38 - 07:10 (actual)")).toBeTruthy();' "$TASK_TILE_TEST"
           grep -Fq 'expect(getByText("04:38 PM - 07:10 AM (actual)")).toBeTruthy();' "$TASK_TILE_TEST"
+          echo "CHECKPOINT tasktile-test-reconciliation PASS"
 
           # Stopped-task fixture reconciliation: exactly one inserted upstream fixture on accepted NMHS base.
           test "$(grep -c '^export const mockStoppedNonMedicationTileData = ' "$TASK_MOCK")" -eq 1
@@ -121,6 +125,7 @@ jobs:
           if actual != expected:
               raise SystemExit("STOP: stopped fixture reconciliation mismatch")
           PY
+          echo "CHECKPOINT stopped-task-fixture PASS"
 
           # Critical source feature markers must now exist in the actual immutable branch tree.
           grep -Fq 'TaskFormLink' src/features/DisplayControls/NursingTasks/components/TaskTile.jsx
@@ -131,6 +136,7 @@ jobs:
           grep -Fq 'getPreviousShiftDetails' src/features/CareViewPatientsSummary/components/CareViewPatientsSummary.jsx
           test -f src/features/DisplayControls/CareInstructions/components/CareInstructions.jsx
           test -f src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.jsx
+          echo "CHECKPOINT critical-feature-markers PASS"
 
           echo "Materialized G6 source reconciliation model: PASS"
 
