@@ -1,0 +1,107 @@
+name: NMHS UPSTREAM-002 IPD-ADOPT-001B Validation
+
+on:
+  push:
+    branches:
+      - upstream-002-ipd-adopt-001b-hosted-validation-v1
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      SOURCE_COMMIT: beeb307d192f7e4e4fc7177fbc6b9bf5ee7d7809
+      SOURCE_PARENT: 57d9043c78358a9599ac4d20a73f890833fcd588
+
+    steps:
+      - name: Checkout validation control
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+
+      - name: Verify immutable source and scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$(git rev-parse HEAD^)" = "$SOURCE_COMMIT"
+          test "$(git rev-parse "$SOURCE_COMMIT^")" = "$SOURCE_PARENT"
+
+          git diff --name-only "$SOURCE_PARENT" "$SOURCE_COMMIT" | sort > /tmp/source-files.txt
+
+          printf '%s\n' \
+            'public/i18n/locale_en.json' \
+            'src/constants.js' \
+            'src/entries/Dashboard/Dashboard.jsx' \
+            'src/entries/Dashboard/componentMapping.js' \
+            'src/features/DisplayControls/CareInstructions/components/CareInstructions.jsx' \
+            'src/features/DisplayControls/CareInstructions/styles/CareInstructions.scss' \
+            'src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.jsx' \
+            'src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.test.js' \
+            'src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx' \
+            | sort > /tmp/expected-files.txt
+
+          diff -u /tmp/expected-files.txt /tmp/source-files.txt
+
+          test "$(git diff --name-only "$SOURCE_COMMIT" HEAD)" = '.github/workflows/nmhs-upstream-002-ipd-adopt-001b.yml'
+
+          if git diff "$SOURCE_PARENT" "$SOURCE_COMMIT" | grep -E \
+            'saveBulkNonMedicationTasks|enableAddMultipleTask|enableStopTasks|nursingTaskScheduling|previousVersionUuid|Previous Shift|taskToFormMapping|STOP_TASKS|Stop Tasks'
+          then
+            echo 'Deferred feature leaked into IPD-ADOPT-001B source delta'
+            false
+          fi
+
+          grep -F 'export const homePageUrl = "/bahmni-v2/home/";' src/constants.js
+          grep -F 'export const FHIR_TASK_URL = FHIR2_R4 + "/Task";' src/constants.js
+          grep -F 'CARE_INSTRUCTIONS: "CI"' src/constants.js
+          grep -F 'careInstructionsTasks: false' src/entries/Dashboard/Dashboard.jsx
+          grep -F 'enableNurseAcknowledgement = false' src/features/DisplayControls/CareInstructions/components/CareInstructions.jsx
+          grep -F 'hideMedicationTab={true}' src/features/DisplayControls/CareInstructions/components/CareInstructions.jsx
+          grep -F 'focus:' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
+          grep -F 'basedOn:' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
+          grep -F 'Observation/${observationUuid}' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
+          grep -F 'ServiceRequest/${orderUuid}' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
+          grep -F 'nmhsTheme' src/entries/CareViewDashboard/CareViewDashboard.jsx
+
+      - name: Use Node.js 14.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run Care Instructions utility tests
+        run: yarn jest src/features/DisplayControls/CareInstructions/utils/CareInstructionsUtils.test.js --runInBand
+
+      - name: Build frontend
+        run: yarn build
+
+      - name: Run existing CI test command
+        run: yarn test:ci
+
+      - name: Record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'SOURCE_COMMIT=%s\n' "$SOURCE_COMMIT" > provenance.txt
+          printf 'SOURCE_PARENT=%s\n' "$SOURCE_PARENT" >> provenance.txt
+          printf 'VALIDATION_CONTROL=%s\n' "$(git rev-parse HEAD)" >> provenance.txt
+          find dist/federation -type f -print0 | sort -z | xargs -0 sha256sum > federation-sha256.txt
+
+      - name: Upload validation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmhs-ipd-adopt-001b-frontend
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/federation
+            provenance.txt
+            federation-sha256.txt
