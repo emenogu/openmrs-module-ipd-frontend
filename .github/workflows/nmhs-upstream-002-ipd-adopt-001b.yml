@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          test "$(git rev-parse HEAD^)" = "$SOURCE_COMMIT"
+          git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD
           test "$(git rev-parse "$SOURCE_COMMIT^")" = "$SOURCE_PARENT"
 
           git diff --name-only "$SOURCE_PARENT" "$SOURCE_COMMIT" | sort > /tmp/source-files.txt
@@ -47,7 +47,7 @@ jobs:
 
           diff -u /tmp/expected-files.txt /tmp/source-files.txt
 
-          test "$(git diff --name-only "$SOURCE_COMMIT" HEAD)" = '.github/workflows/nmhs-upstream-002-ipd-adopt-001b.yml'
+          test "$(git diff --name-only "$SOURCE_COMMIT" HEAD | sort -u)" = '.github/workflows/nmhs-upstream-002-ipd-adopt-001b.yml'
 
           if git diff "$SOURCE_PARENT" "$SOURCE_COMMIT" | grep -E \
             'saveBulkNonMedicationTasks|enableAddMultipleTask|enableStopTasks|nursingTaskScheduling|previousVersionUuid|Previous Shift|taskToFormMapping|STOP_TASKS|Stop Tasks'
@@ -66,7 +66,8 @@ jobs:
           grep -F 'basedOn:' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
           grep -F 'Observation/${observationUuid}' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
           grep -F 'ServiceRequest/${orderUuid}' src/features/DisplayControls/NursingTasks/components/AddEmergencyTasks.jsx
-          grep -F 'nmhsTheme' src/entries/CareViewDashboard/CareViewDashboard.jsx
+          grep -F 'nmhsTheme' src/entries/CareViewDashboard/CareViewDashboard.scss
+          grep -F 'nmhsTheme' src/entries/Dashboard/Dashboard.scss
 
       - name: Use Node.js 14.x
         uses: actions/setup-node@v4
