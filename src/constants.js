@@ -95,6 +95,7 @@ export const BAHMNI_CORE_OBSERVATIONS_BASE_URL = BAHMNI_CORE + "/observations?";
 export const NON_MEDICATION_BASE_URL = RESTWS_V1 + "/tasks";
 
 export const GET_TASKS_FOR_PATIENTS_URL = RESTWS_V1 + "/tasks";
+export const FHIR_TASK_URL = FHIR2_R4 + "/Task";
 
 export const defaultDateFormat = "DD MMM YYYY";
 export const defaultDateTimeFormat = "DD MMM YYYY hh:mm a";
@@ -116,6 +117,7 @@ export const componentKeys = {
   INTAKE_OUTPUT: "IO",
   NUTRITION_ADVICE_FORM: "NAF",
   PATIENT_FEEDING_RECORD: "PFR",
+  CARE_INSTRUCTIONS: "CI",
 };
 
 export const performerFunction = "Performer";
