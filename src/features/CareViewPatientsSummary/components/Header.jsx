@@ -17,7 +17,7 @@ export const Header = ({ timeframeLimitInHours, navHourEpoch }) => {
     setTaskFilterType,
   } = useContext(CareViewContext);
   const { enable24HourTime = {} } = ipdConfig;
-  const { enableNurseAcknowledgement = false } = careViewConfig;
+  const { enableNurseAcknowledgement = false } = careViewConfig || {};
   const intl = useIntl();
   const taskFilterTypes = [
     TASK_FILTER_HEADER.ALL,
