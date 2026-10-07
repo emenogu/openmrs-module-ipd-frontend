@@ -53,56 +53,32 @@ jobs:
             exit 1
           fi
 
+      - name: Verify accepted snapshot inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          printf '%s  %s\n' \
+            '208e4eefdf56cfc5f292f949fcf3e788aa13cbd04db2fea52cd545c796f1d99b' 'src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap' \
+            '8aad8c206df0c47a6ae45643966e6765473437007cdb8f2c16ca920bd71200d4' 'src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap' \
+            '5c3b1b027e2b41d0c372a23fc12bd4310d347d8b40617e1bf5eeaf3a6dd87cfb' 'src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap' \
+            '1265aa6e03e03a9b78d6b91945a360c5a991ca7a709f047276199217c3800799' 'src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap' \
+            '189a47d095f439873e4b1cefcb875bf2eb4a232571eba6814e4da30199999a88' 'src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap' \
+            | sha256sum -c -
+
       - name: Install
         run: yarn install --frozen-lockfile
 
       - name: Build
         run: yarn build
 
-      - name: Generate snapshot candidates
-        run: yarn test:ci -u
+      - name: Test
+        run: yarn test:ci
 
-      - name: Fail closed on snapshot candidate scope
+      - name: Verify clean post-validation state
         shell: bash
         run: |
           set -euo pipefail
-
-          allowed="$(mktemp)"
-          changed="$(mktemp)"
-
-          printf '%s\n' \
-            'src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap' \
-            'src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap' \
-            'src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap' \
-            'src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap' \
-            'src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap' \
-            > "$allowed"
-
-          git status --porcelain |
-            sed 's/^...//' |
-            sort -u > "$changed"
-
-          echo '=== SNAPSHOT CANDIDATE CHANGES ==='
-          cat "$changed"
-
-          test -s "$changed"
-
-          unexpected="$(comm -23 "$changed" <(sort -u "$allowed"))"
-          if [ -n "$unexpected" ]; then
-            echo 'FAIL: unexpected snapshot candidate changes'
-            printf '%s\n' "$unexpected"
-            exit 1
-          fi
-
-          echo 'SNAPSHOT_CANDIDATE_SCOPE=PASS'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bundle1-frontend-snapshot-candidates
-          path: |
-            src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap
-            src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap
-            src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap
-            src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap
-            src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap
-          if-no-files-found: error
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+          echo 'FINAL_FRONTEND_VALIDATION=PASS'
