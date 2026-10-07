@@ -1,6 +1,7 @@
 import axios from "axios";
 import {
   BAHMNI_CORE_OBSERVATIONS_BASE_URL,
+  OBSERVATIONS_BATCH_URL,
   FHIR_TASK_URL,
   defaultDateTimeFormat12Hrs,
 } from "../../../../constants";
@@ -20,38 +21,26 @@ export const serializeParams = (params) =>
 export const fetchCareInstructionsObs = async (visitUuid, conceptNames) => {
   try {
     const response = await axios.get(OBSERVATIONS_URL, {
-      params: {
-        visitUuid,
-        concept: conceptNames,
-        filterObsWithOrders: false,
-      },
+      params: { visitUuid, concept: conceptNames, filterObsWithOrders: false },
       paramsSerializer: serializeParams,
       withCredentials: true,
     });
     return response.data;
   } catch (error) {
-    console.error("Failed to fetch care instructions", error);
     return [];
   }
 };
 
 export const fetchTasksByObservationUuids = async (observationUuids) => {
-  const uniqueObservationUuids = [
-    ...new Set((observationUuids || []).filter(Boolean)),
-  ];
-
-  if (uniqueObservationUuids.length === 0) return [];
-
+  if (!observationUuids || observationUuids.length === 0) return [];
   try {
-    const focusValues = uniqueObservationUuids
+    const url = `${FHIR_TASK_URL}?focus=${observationUuids
       .map((uuid) => `Observation/${uuid}`)
-      .join(",");
-    const response = await axios.get(
-      `${FHIR_TASK_URL}?focus=${focusValues}&_count=500`,
-      { withCredentials: true }
-    );
+      .join(",")}&_count=500`;
 
-    return (response.data?.entry || []).map((entry) => ({
+    const response = await axios.get(url, { withCredentials: true });
+    const entries = response.data?.entry || [];
+    return entries.map((entry) => ({
       uuid: entry.resource?.id,
       observationUuid: entry.resource?.focus?.reference?.split("/").pop(),
       status: entry.resource?.status,
@@ -62,25 +51,54 @@ export const fetchTasksByObservationUuids = async (observationUuids) => {
   }
 };
 
-export const getAcknowledgedObservationUuids = (tasks) =>
-  new Set(
-    (tasks || [])
-      .map((task) => task.observationUuid)
-      .filter(Boolean)
-  );
+export const getAcknowledgedObservationUuids = (allTasks) => {
+  return new Set(allTasks.map((task) => task.observationUuid).filter(Boolean));
+};
 
-const extractObservationValue = (value) => {
-  if (value == null) return "";
-  if (typeof value === "object") {
-    return value.display ?? value.name ?? "";
+export const getPendingTaskUuidsByObservation = (allTasks) => {
+  return allTasks.reduce((acc, task) => {
+    if (task.status === "requested" && task.observationUuid) {
+      acc[task.observationUuid] = acc[task.observationUuid] || [];
+      acc[task.observationUuid].push(task.uuid);
+    }
+    return acc;
+  }, {});
+};
+
+export const fetchAcknowledgedObservationUuids = async (obsUuids) => {
+  const tasks = await fetchTasksByObservationUuids(obsUuids);
+  return getAcknowledgedObservationUuids(tasks);
+};
+
+export const fetchBatchObservations = async (
+  visitUuids,
+  concepts,
+  filterObsWithOrders = false
+) => {
+  try {
+    const request = {
+      visitUuids,
+      concept: concepts,
+      filterObsWithOrders,
+    };
+
+    const response = await axios.post(OBSERVATIONS_BATCH_URL, request, {
+      withCredentials: true,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch observations batch", error);
+    return [];
   }
+};
+
+const extractObsValue = (value) => {
+  if (value == null) return "";
+  if (typeof value === "object") return value.display ?? value.name ?? "";
   return String(value);
 };
 
-export const mapObservationsToInstructions = (
-  observations,
-  formConcepts
-) => {
+export const mapObservationsToInstructions = (observations, formConcepts) => {
   if (!observations || !formConcepts || formConcepts.length === 0) {
     return [];
   }
@@ -92,44 +110,55 @@ export const mapObservationsToInstructions = (
     ])
   );
 
-  return observations.reduce((result, observation) => {
-    if (!observation.formFieldPath) return result;
+  return observations.reduce((result, obs) => {
+    if (!obs.formFieldPath) return result;
 
-    const formName = observation.formFieldPath.split(".")[0];
+    const formName = obs.formFieldPath.split(".")[0];
     const allowedConcepts = formConceptsMap.get(formName);
 
     if (
       !allowedConcepts ||
-      !observation.conceptFSN ||
-      !allowedConcepts.includes(observation.conceptFSN)
+      !obs.conceptFSN ||
+      !allowedConcepts.includes(obs.conceptFSN)
     ) {
       return result;
     }
 
-    let instruction = extractObservationValue(observation.value);
-
-    if (
-      observation.type === "Datetime" ||
-      observation.concept?.dataType === "Datetime"
-    ) {
+    let instruction = extractObsValue(obs.value);
+    if (obs.type === "Datetime" || obs.concept?.dataType === "Datetime") {
       instruction = formatTime(
-        observation.value,
+        obs.value,
         "YYYY-MM-DD HH:mm:ss",
         defaultDateTimeFormat12Hrs
       );
     }
 
     result.push({
-      observationUuid: observation.uuid,
-      orderUuid: observation.orderUuid ?? null,
-      encounterUuid: observation.encounterUuid,
-      observationDateTime: observation.observationDateTime,
+      observationUuid: obs.uuid,
+      orderUuid: obs.orderUuid ?? null,
+      encounterUuid: obs.encounterUuid,
+      observationDateTime: obs.observationDateTime,
       form: formName,
-      instructionType: observation.concept.name,
+      instructionType: obs.concept.name,
       instruction,
-      providerName: observation.providers?.[0]?.name ?? "",
+      providerName: obs.providers?.[0]?.name ?? "",
+      previousVersionUuid: obs.previousVersionUuid ?? null,
+      action: "",
     });
 
     return result;
   }, []);
+};
+
+export const filterPreviousShiftInstructions = (
+  instructions,
+  currentShiftStartTime
+) => {
+  if (!instructions || instructions.length === 0) {
+    return [];
+  }
+
+  return instructions.filter(
+    (instruction) => instruction.observationDateTime < currentShiftStartTime
+  );
 };

@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
   Tabs,
+  Modal,
 } from "carbon-components-react";
 import { IPDContext } from "../../../../context/IPDContext";
 import { SliderContext } from "../../../../context/SliderContext";
@@ -19,9 +20,11 @@ import RefreshDisplayControl from "../../../../context/RefreshDisplayControl";
 import {
   fetchCareInstructionsObs,
   fetchTasksByObservationUuids,
-  getAcknowledgedObservationUuids,
   mapObservationsToInstructions,
-} from "../utils/CareInstructionsUtils";
+  getAcknowledgedObservationUuids,
+  getPendingTaskUuidsByObservation,
+} from "../utils/CareInstructionsUtils.jsx";
+import { updateNonMedicationTask } from "../../NursingTasks/utils/NursingTasksUtils";
 import { getDateTimeFromEpochTime } from "../../../../utils/DateTimeUtils";
 import AddEmergencyTasks from "../../NursingTasks/components/AddEmergencyTasks";
 import Notification from "../../../../components/Notification/Notification";
@@ -29,73 +32,135 @@ import { isUserPrivileged } from "../../../../utils/CommonUtils";
 import { PRIVILEGE_CONSTANTS, componentKeys } from "../../../../constants";
 import "../styles/CareInstructions.scss";
 
-const EMPTY_FORM_CONCEPTS = [];
 const SKELETON_ROW_COUNT = 3;
+const EMPTY_FORM_CONCEPTS = [];
+const getInitialTaskName = (instructionType, instruction) =>
+  [instructionType, instruction].filter(Boolean).join(" - ");
 
-const CareInstructions = ({ patientId, config: sectionConfig = {} }) => {
+const CareInstructions = (props) => {
+  const { patientId, config: { formConcepts = EMPTY_FORM_CONCEPTS } = {} } =
+    props;
+  const ipdContext = useContext(IPDContext);
   const intl = useIntl();
-  const refreshDisplayControl = useContext(RefreshDisplayControl);
-  const {
-    visit,
-    config: dashboardConfig,
-    currentUser,
-  } = useContext(IPDContext);
+  const { visit, config, currentUser } = ipdContext;
+  const { enable24HourTime = false, enableStopTasks = false } = config || {};
   const { isSliderOpen, updateSliderOpen, provider } =
     useContext(SliderContext);
-
-  const {
-    enable24HourTime = false,
-    enableNurseAcknowledgement = false,
-  } = dashboardConfig || {};
-  const { formConcepts = EMPTY_FORM_CONCEPTS } = sectionConfig;
-
-  const [instructions, setInstructions] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [selectedInstruction, setSelectedInstruction] = useState({
-    observationUuid: null,
-    orderUuid: null,
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [isTasksLoading, setIsTasksLoading] = useState(false);
+  const refreshDisplayControl = useContext(RefreshDisplayControl);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationStatus, setNotificationStatus] = useState("");
-
   const providerUuid = provider?.uuid;
+
+  const handleSetNotificationMessage = (msg) => {
+    setNotificationMessage(
+      intl.formatMessage({ id: msg, defaultMessage: msg })
+    );
+  };
+
+  const updateCareInstructionsTasksSlider = (value) => {
+    updateSliderOpen((prev) => ({ ...prev, careInstructionsTasks: value }));
+  };
 
   const allConceptNames = useMemo(
     () => [
-      ...new Set(
-        formConcepts.flatMap((formConcept) => formConcept.concepts || [])
-      ),
+      ...new Set(formConcepts.flatMap((formConcept) => formConcept.concepts)),
     ],
     [formConcepts]
   );
 
-  const acknowledgedObservationUuids = useMemo(
-    () => getAcknowledgedObservationUuids(tasks),
-    [tasks]
+  const [instructions, setInstructions] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [selectedInstruction, setSelectedInstruction] = useState({
+    observationUuid: null,
+    orderUuid: null,
+    instruction: "",
+    initialTaskName: "",
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isTasksLoading, setIsTasksLoading] = useState(false);
+  const [isStoppingTasks, setIsStoppingTasks] = useState(false);
+  const [isSubmittingStop, setIsSubmittingStop] = useState(false);
+
+  const acknowledgedObsUuids = useMemo(
+    () => getAcknowledgedObservationUuids(allTasks),
+    [allTasks]
+  );
+
+  const pendingTaskUuidsByObservation = useMemo(
+    () => getPendingTaskUuidsByObservation(allTasks),
+    [allTasks]
+  );
+
+  const careInstructionsHeaders = useMemo(
+    () => [
+      {
+        key: "dateAndTime",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_DATE_AND_TIME_HEADER",
+          defaultMessage: "Date and Time",
+        }),
+      },
+      {
+        key: "form",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_FORM_HEADER",
+          defaultMessage: "Form",
+        }),
+      },
+      {
+        key: "instructionType",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_INSTRUCTION_TYPE_HEADER",
+          defaultMessage: "Instruction Type",
+        }),
+      },
+      {
+        key: "instruction",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_INSTRUCTION_HEADER",
+          defaultMessage: "Instruction",
+        }),
+      },
+      {
+        key: "providerName",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_PROVIDER_NAME_HEADER",
+          defaultMessage: "Provider Name",
+        }),
+      },
+      {
+        key: "action",
+        header: intl.formatMessage({
+          id: "CARE_INSTRUCTIONS_ACTION_HEADER",
+          defaultMessage: "Action",
+        }),
+      },
+      ...(enableStopTasks ? [{ key: "stopTasks", header: "" }] : []),
+    ],
+    [intl, enableStopTasks]
   );
 
   useEffect(() => {
     const loadInstructions = async () => {
-      if (!visit || formConcepts.length === 0) {
-        setInstructions([]);
-        return;
-      }
+      if (!visit || formConcepts.length === 0) return;
 
       setIsLoading(true);
+
       try {
         const observations = await fetchCareInstructionsObs(
           visit,
           allConceptNames
         );
-        const mappedInstructions = mapObservationsToInstructions(
+
+        const mapped = mapObservationsToInstructions(
           observations,
           formConcepts
-        )
+        );
+
+        const allInstructions = mapped
           .map((instruction, index) => ({
-            id: `${instruction.encounterUuid}-${instruction.observationUuid}-${index}`,
+            id: `${instruction.encounterUuid}-${instruction.instructionType}-${index}`,
             ...instruction,
           }))
           .sort(
@@ -104,213 +169,239 @@ const CareInstructions = ({ patientId, config: sectionConfig = {} }) => {
               instructionA.observationDateTime
           );
 
-        setInstructions(mappedInstructions);
+        setInstructions(allInstructions);
+      } catch (error) {
+        console.error("Failed to load care instructions", error);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadInstructions();
-  }, [visit, formConcepts, allConceptNames]);
+  }, [visit, formConcepts]);
 
   useEffect(() => {
-    const loadTasks = async () => {
-      if (!enableNurseAcknowledgement || instructions.length === 0) {
-        setTasks([]);
+    const fetchTasks = async () => {
+      if (instructions.length === 0) {
         return;
       }
-
-      const observationUuids = instructions
-        .map((instruction) => instruction.observationUuid)
-        .filter(Boolean);
-
       setIsTasksLoading(true);
       try {
-        setTasks(await fetchTasksByObservationUuids(observationUuids));
+        const observationUuids = new Set();
+        instructions.forEach((instruction) => {
+          observationUuids.add(instruction.observationUuid);
+          if (instruction.previousVersionUuid) {
+            observationUuids.add(instruction.previousVersionUuid);
+          }
+        });
+
+        const tasks = await fetchTasksByObservationUuids(
+          Array.from(observationUuids)
+        );
+
+        setAllTasks(tasks);
+      } catch (error) {
+        console.error("Failed to fetch tasks", error);
+        setAllTasks([]);
       } finally {
         setIsTasksLoading(false);
       }
     };
 
-    loadTasks();
-  }, [enableNurseAcknowledgement, instructions]);
+    fetchTasks();
+  }, [instructions]);
 
-  const updateCareInstructionsTasksSlider = (value) => {
-    updateSliderOpen((previous) => ({
-      ...previous,
-      careInstructionsTasks: value,
-    }));
+  const getPendingTaskCount = (instruction) => {
+    const currentVersionCount =
+      pendingTaskUuidsByObservation[instruction.observationUuid]?.length || 0;
+    const previousVersionCount = instruction.previousVersionUuid
+      ? pendingTaskUuidsByObservation[instruction.previousVersionUuid]
+          ?.length || 0
+      : 0;
+    return currentVersionCount + previousVersionCount;
   };
 
-  const openTaskPanel = (instruction) => {
-    if (!providerUuid || isSliderOpen.careInstructionsTasks) return;
+  const notAcknowledgedInstructions = useMemo(
+    () =>
+      instructions.filter(
+        (row) => !acknowledgedObsUuids.has(row.observationUuid)
+      ),
+    [instructions, acknowledgedObsUuids]
+  );
 
-    setSelectedInstruction({
-      observationUuid: instruction.observationUuid,
-      orderUuid: instruction.orderUuid,
-    });
-    updateCareInstructionsTasksSlider(true);
-  };
+  const acknowledgedInstructions = useMemo(
+    () =>
+      instructions.filter((row) =>
+        acknowledgedObsUuids.has(row.observationUuid)
+      ),
+    [instructions, acknowledgedObsUuids]
+  );
 
-  const headers = [
-    {
-      key: "dateAndTime",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_DATE_AND_TIME_HEADER",
-        defaultMessage: "Date and Time",
-      }),
-    },
-    {
-      key: "form",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_FORM_HEADER",
-        defaultMessage: "Form",
-      }),
-    },
-    {
-      key: "instructionType",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_INSTRUCTION_TYPE_HEADER",
-        defaultMessage: "Instruction Type",
-      }),
-    },
-    {
-      key: "instruction",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_INSTRUCTION_HEADER",
-        defaultMessage: "Instruction",
-      }),
-    },
-    {
-      key: "providerName",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_PROVIDER_NAME_HEADER",
-        defaultMessage: "Provider Name",
-      }),
-    },
-    {
-      key: "action",
-      header: intl.formatMessage({
-        id: "CARE_INSTRUCTIONS_ACTION_HEADER",
-        defaultMessage: "Action",
-      }),
-    },
-  ];
+  const renderInstructionRows = (rows) => (
+    <Table useZebraStyles>
+      <TableHead>
+        <TableRow>
+          {careInstructionsHeaders.map((header) => (
+            <TableHeader key={header.key}>{header.header}</TableHeader>
+          ))}
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow
+            key={row.id}
+            className={row.previousVersionUuid ? "edited-instruction-row" : ""}
+          >
+            <TableCell>
+              {getDateTimeFromEpochTime(
+                row.observationDateTime,
+                enable24HourTime
+              )}
+            </TableCell>
+            <TableCell>{row.form}</TableCell>
+            <TableCell>{row.instructionType}</TableCell>
+            <TableCell className="instruction-cell">
+              {row.instruction}
+            </TableCell>
+            <TableCell>{row.providerName}</TableCell>
+            <TableCell className="action-cell">
+              {isUserPrivileged(currentUser, PRIVILEGE_CONSTANTS.ADD_TASKS) && (
+                <Link
+                  onClick={() => {
+                    if (!providerUuid) {
+                      setNotificationStatus("error");
+                      handleSetNotificationMessage("UNKNOWN_ERROR");
+                      setShowNotification(true);
+                      return;
+                    }
+                    if (!isSliderOpen.careInstructionsTasks) {
+                      setSelectedInstruction({
+                        observationUuid: row.observationUuid,
+                        orderUuid: row.orderUuid,
+                        instruction: row.instruction,
+                        initialTaskName: getInitialTaskName(
+                          row.instructionType,
+                          row.instruction
+                        ),
+                      });
+                      updateCareInstructionsTasksSlider(true);
+                    }
+                  }}
+                >
+                  <FormattedMessage id="ADD_TASK" defaultMessage="Add Task" />
+                </Link>
+              )}
+            </TableCell>
+            {enableStopTasks && (
+              <TableCell className="stop-tasks-cell">
+                {getPendingTaskCount(row) > 0 &&
+                  isUserPrivileged(
+                    currentUser,
+                    PRIVILEGE_CONSTANTS.EDIT_TASKS
+                  ) && (
+                    <Link
+                      onClick={() => {
+                        setSelectedInstruction({
+                          observationUuid: row.observationUuid,
+                          previousVersionUuid: row.previousVersionUuid,
+                        });
+                        setIsStoppingTasks(true);
+                      }}
+                    >
+                      <FormattedMessage
+                        id="STOP_TASKS"
+                        defaultMessage="Stop Tasks"
+                      />
+                    </Link>
+                  )}
+              </TableCell>
+            )}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 
-  const renderRows = (rows) => {
-    if (rows.length === 0) {
+  const renderNotAcknowledgedContent = () => {
+    if (notAcknowledgedInstructions.length === 0) {
       return (
-        <div className="empty-state-message">
+        <div className={"empty-state-message"}>
           <FormattedMessage
-            id="NO_CARE_INSTRUCTIONS_MESSAGE"
-            defaultMessage="No care instructions are available for the patient"
+            id={"NO_CARE_INSTRUCTIONS_MESSAGE"}
+            defaultMessage={
+              "No care instructions are available for the patient"
+            }
           />
         </div>
       );
     }
+    return renderInstructionRows(notAcknowledgedInstructions);
+  };
 
-    return (
-      <Table useZebraStyles>
-        <TableHead>
-          <TableRow>
-            {headers.map((header) => (
-              <TableHeader key={header.key}>{header.header}</TableHeader>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell>
-                {getDateTimeFromEpochTime(
-                  row.observationDateTime,
-                  enable24HourTime
-                )}
-              </TableCell>
-              <TableCell>{row.form}</TableCell>
-              <TableCell>{row.instructionType}</TableCell>
-              <TableCell className="instruction-cell">
-                {row.instruction}
-              </TableCell>
-              <TableCell>{row.providerName}</TableCell>
-              <TableCell className="action-cell">
-                {isUserPrivileged(
-                  currentUser,
-                  PRIVILEGE_CONSTANTS.ADD_TASKS
-                ) && (
-                  <Link onClick={() => openTaskPanel(row)}>
-                    <FormattedMessage
-                      id="ADD_TASK"
-                      defaultMessage="Add Task"
-                    />
-                  </Link>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    );
+  const renderAcknowledgedContent = () => {
+    if (acknowledgedInstructions.length === 0) {
+      return (
+        <div className={"empty-state-message"}>
+          <FormattedMessage
+            id={"NO_CARE_INSTRUCTIONS_MESSAGE"}
+            defaultMessage={
+              "No care instructions are available for the patient"
+            }
+          />
+        </div>
+      );
+    }
+    return renderInstructionRows(acknowledgedInstructions);
   };
 
   if (isLoading || isTasksLoading) {
     return (
-      <DataTableSkeleton
-        rowCount={SKELETON_ROW_COUNT}
-        columnCount={headers.length}
-      />
+      <div data-testid="care-instructions-loading">
+        <DataTableSkeleton
+          rowCount={SKELETON_ROW_COUNT}
+          columnCount={careInstructionsHeaders.length}
+        />
+      </div>
     );
   }
 
-  const notAcknowledgedInstructions = instructions.filter(
-    (instruction) =>
-      !acknowledgedObservationUuids.has(instruction.observationUuid)
-  );
-  const acknowledgedInstructions = instructions.filter((instruction) =>
-    acknowledgedObservationUuids.has(instruction.observationUuid)
-  );
-
   return (
-    <div className="care-instructions-display-control">
-      {enableNurseAcknowledgement ? (
-        <Tabs>
-          <Tab
-            id="notAcknowledged"
-            label={intl.formatMessage({
-              id: "NOT_ACKNOWLEDGED_TAB",
-              defaultMessage: "Not Acknowledged",
-            })}
-          >
-            {renderRows(notAcknowledgedInstructions)}
-          </Tab>
-          <Tab
-            id="acknowledged"
-            label={intl.formatMessage({
-              id: "ACKNOWLEDGED_TAB",
-              defaultMessage: "Acknowledged",
-            })}
-          >
-            {renderRows(acknowledgedInstructions)}
-          </Tab>
-        </Tabs>
-      ) : (
-        renderRows(instructions)
-      )}
-
+    <div className={"care-instructions-display-control"}>
+      <Tabs>
+        <Tab
+          id="notAcknowledged"
+          label={intl.formatMessage({
+            id: "NOT_ACKNOWLEDGED_TAB",
+            defaultMessage: "Not Acknowledged",
+          })}
+        >
+          {renderNotAcknowledgedContent()}
+        </Tab>
+        <Tab
+          id="acknowledged"
+          label={intl.formatMessage({
+            id: "ACKNOWLEDGED_TAB",
+            defaultMessage: "Acknowledged",
+          })}
+        >
+          {renderAcknowledgedContent()}
+        </Tab>
+      </Tabs>
       {isSliderOpen.careInstructionsTasks && (
         <AddEmergencyTasks
           patientId={patientId}
           providerId={providerUuid}
           updateEmergencyTasksSlider={updateCareInstructionsTasksSlider}
           setShowNotification={setShowNotification}
-          setNotificationMessage={setNotificationMessage}
+          setNotificationMessage={handleSetNotificationMessage}
           setNotificationStatus={setNotificationStatus}
           hideMedicationTab={true}
           observationUuid={selectedInstruction.observationUuid}
           orderUuid={selectedInstruction.orderUuid}
+          instruction={selectedInstruction.instruction}
+          initialTaskName={selectedInstruction.initialTaskName}
         />
       )}
-
       {showNotification && (
         <Notification
           hostData={{
@@ -328,12 +419,93 @@ const CareInstructions = ({ patientId, config: sectionConfig = {} }) => {
           }}
         />
       )}
+      {enableStopTasks && (
+        <Modal
+          open={isStoppingTasks}
+          modalHeading={intl.formatMessage({
+            id: "STOP_TASKS_CONFIRMATION_TITLE",
+            defaultMessage: "Stop Pending Tasks",
+          })}
+          onRequestClose={() => {
+            setIsStoppingTasks(false);
+          }}
+          primaryButtonText={intl.formatMessage({
+            id: "STOP_TASKS_CONFIRM_BUTTON",
+            defaultMessage: "Confirm",
+          })}
+          secondaryButtonText={intl.formatMessage({
+            id: "STOP_TASKS_CANCEL_BUTTON",
+            defaultMessage: "Cancel",
+          })}
+          onRequestSubmit={async () => {
+            setIsSubmittingStop(true);
+            try {
+              const { observationUuid, previousVersionUuid } =
+                selectedInstruction;
+
+              const taskUuidsToStop = [observationUuid, previousVersionUuid]
+                .filter(Boolean)
+                .flatMap((uuid) => pendingTaskUuidsByObservation[uuid] ?? []);
+
+              if (taskUuidsToStop.length === 0) {
+                setIsStoppingTasks(false);
+                setIsSubmittingStop(false);
+                return;
+              }
+
+              const updatePayload = taskUuidsToStop.map((taskUuid) => ({
+                uuid: taskUuid,
+                executionEndTime: Date.now(),
+                status: "CANCELLED",
+              }));
+
+              const response = await updateNonMedicationTask(updatePayload);
+
+              if (response?.status === 200) {
+                setNotificationMessage(
+                  intl.formatMessage({
+                    id: "ALL_PENDING_TASKS_STOPPED_SUCCESSFULLY",
+                    defaultMessage: "All pending tasks stopped successfully.",
+                  })
+                );
+                setNotificationStatus("success");
+                setShowNotification(true);
+              } else {
+                throw new Error("Failed to update tasks");
+              }
+
+              setIsStoppingTasks(false);
+              setIsSubmittingStop(false);
+            } catch (error) {
+              setIsStoppingTasks(false);
+              setIsSubmittingStop(false);
+              setNotificationMessage(
+                intl.formatMessage({
+                  id: "FAILED_TO_STOP_TASKS",
+                  defaultMessage: "Failed to stop tasks. Please try again.",
+                })
+              );
+              setNotificationStatus("error");
+              setShowNotification(true);
+            }
+          }}
+          primaryButtonDisabled={isSubmittingStop}
+          danger={true}
+        >
+          <p>
+            <FormattedMessage
+              id="STOP_TASKS_CONFIRMATION_MESSAGE"
+              defaultMessage="Are you sure you want to stop all pending tasks for this instruction?"
+            />
+          </p>
+        </Modal>
+      )}
     </div>
   );
 };
 
 CareInstructions.propTypes = {
-  patientId: PropTypes.string.isRequired,
+  patientId: PropTypes.string,
   config: PropTypes.shape({
     formConcepts: PropTypes.arrayOf(
       PropTypes.shape({

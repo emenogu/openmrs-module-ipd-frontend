@@ -6,6 +6,8 @@ export const BASE_URL =
     ? __webpack_public_path__
     : "/";
 export const LS_LANG_KEY = "NG_TRANSLATE_LANG_KEY";
+export const CONFIG_TRANSLATIONS_BASE = "/bahmni_config/openmrs/i18n/ipd/";
+export const BUNDLED_TRANSLATIONS_BASE = "i18n";
 
 const hostUrl = localStorage.getItem("host")
   ? "https://" + localStorage.getItem("host")
@@ -16,7 +18,7 @@ const BAHMNI_CORE = RESTWS_V1 + "/bahmnicore";
 export const ADDRESS_HEIRARCHY =
   hostUrl +
   "/openmrs/module/addresshierarchy/ajax/getOrderedAddressHierarchyLevels.form";
-export const homePageUrl = "/bahmni-v2/home/";
+export const homePageUrl = "/bahmni/home/#/dashboard";
 
 export const MEDICATIONS_BASE_URL = RESTWS_V1 + "/ipd/schedule/type/medication";
 export const EDIT_MEDICATIONS_BASE_URL =
@@ -25,6 +27,8 @@ export const ADMINISTERED_MEDICATIONS_BASE_URL =
   RESTWS_V1 + "/ipd/scheduledMedicationAdministrations";
 export const EMERGENCY_MEDICATIONS_BASE_URL =
   RESTWS_V1 + "/ipd/adhocMedicationAdministrations";
+export const MEDICATION_ADMINISTRATION_URL =
+  RESTWS_V1 + "/ipd/medicationAdministration";
 export const BOOKMARK_PATIENT_BASE_URL =
   RESTWS_V1 + "/ipd/careteam/participants";
 export const PATIENT_URL = RESTWS_V1 + "/patient";
@@ -35,6 +39,8 @@ export const ALL_DRUG_ORDERS_URL = (visitUuid) =>
   RESTWS_V1 + `/ipdVisit/${visitUuid}/medication?includes=emergencyMedications`;
 export const ALLERGIES_BASE_URL = FHIR2_R4 + "/AllergyIntolerance";
 export const PATIENT_VITALS_URL = BAHMNI_CORE + "/diseaseSummaryData";
+export const CLINICAL_CONFIG_URL =
+  hostUrl + "/bahmni_config/openmrs/apps/clinical/app.json";
 export const DASHBORAD_CONFIG_URL =
   hostUrl + "/bahmni_config/openmrs/apps/ipdDashboard/app.json";
 export const PATIENT_PROFILE = RESTWS_V1 + "/patientprofile";
@@ -67,6 +73,7 @@ export const BAHMNI_VALUE = "bahmni";
 export const CUSTOM_OUTPUT_VALUE =
   "custom:(uuid,name,answers:(uuid,name,mappings))";
 export const SEARCH_CONCEPT_URL = RESTWS_V1 + "/concept";
+export const GLOBAL_PROPERTY_URL = BAHMNI_CORE + "/sql/globalproperty";
 
 export const medicationFrequency = {
   START_TIME_DURATION_FREQUENCY: "START_TIME_DURATION_FREQUENCY",
@@ -92,6 +99,7 @@ export const GET_SEARCH_PATIENT_LIST_URL =
 export const GET_SLOTS_FOR_PATIENTS_URL =
   RESTWS_V1 + "/ipd/schedule/type/medication/patientsMedicationSummary";
 export const BAHMNI_CORE_OBSERVATIONS_BASE_URL = BAHMNI_CORE + "/observations?";
+export const OBSERVATIONS_BATCH_URL = BAHMNI_CORE + "/observations/batch";
 export const NON_MEDICATION_BASE_URL = RESTWS_V1 + "/tasks";
 
 export const GET_TASKS_FOR_PATIENTS_URL = RESTWS_V1 + "/tasks";
@@ -142,6 +150,13 @@ export const WARD_SUMMARY_HEADER = {
   MY_PATIENTS: "MY_PATIENTS",
 };
 
+export const TASK_FILTER_HEADER = {
+  ALL: "ALL",
+  NEW: "NEW",
+  PENDING: "PENDING",
+};
+export const nonMedicationTaskKey = "NON_MEDICATION_TASK";
+
 export const ForbiddenErrorMessage = "User doesn't have required privilege(s)";
 
 export const GenericErrorMessage = "Technical error";
@@ -161,4 +176,28 @@ export const PRIVILEGE_CONSTANTS = {
   ADD_TASKS: "Add Tasks",
   EDIT_TASKS: "Edit Tasks",
   EDIT_MEDICATION_ADMINISTRATION: "Edit Medication Administration",
+  ADT_APPROVE_AMEND_NOTE: "app:adt:approveAmendNote",
+};
+
+export const DOSE_UNITS = ["ml", "mg", "mcg"];
+
+export const LOADING_DOSE_SEQUENCE_OFFSET = 1;
+export const NO_LOADING_DOSE_SEQUENCE_OFFSET = 0;
+export const CONCEPT_SET_GROUP_NAME = "observations"; // Configurable group name for deeplinks
+export const CLINICAL_FORM_URL = (patientUuid, formUuid, conceptSetGroupName = CONCEPT_SET_GROUP_NAME) =>
+  `/bahmni/clinical/index.html#/default/patient/${patientUuid}/dashboard/concept-set-group/${conceptSetGroupName}/form/${formUuid}`;
+
+export const TASK_COLORS = {
+  LINK_BLUE: "#0f62fe",
+  STOP_RED: "#FF0000",
+  RELEVANT_DARK: "#393939",
+  NON_RELEVANT_GRAY: "#525252",
+};
+
+export const NURSING_ACTIVITY_SYSTEM = "nursing_activity_system";
+
+export const sliderTypes = {
+  AMENDMENT: "amendment",
+  ACKNOWLEDGEMENT: "acknowledgement",
+  HISTORY: "history",
 };
