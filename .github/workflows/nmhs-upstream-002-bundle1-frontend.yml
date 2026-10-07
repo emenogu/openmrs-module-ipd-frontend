@@ -1,0 +1,60 @@
+name: NMHS UPSTREAM-002 BUNDLE-1 IPD frontend validation
+
+on:
+  push:
+    branches:
+      - upstream-002-bundle1-ipd-complete-adoption-v1
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '14'
+          cache: yarn
+
+      - name: Verify Bundle-1 feature surface
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -R -F 'enableAddMultipleTask' src
+          grep -R -F 'enableStopTasks' src
+          grep -R -F 'nursingTaskScheduling' src
+          grep -R -F 'CANCELLED' src/features/DisplayControls/NursingTasks
+          grep -R -F 'REQUESTED' src/features/DisplayControls/NursingTasks
+          grep -R -F 'focus:' src/features/DisplayControls/NursingTasks
+          grep -R -F 'basedOn:' src/features/DisplayControls/NursingTasks
+          grep -R -F 'FHIR_TASK_URL' src
+          grep -R -F 'enableNurseAcknowledgement' src
+
+      - name: Verify unrelated upstream areas were not adopted
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only \
+            beeb307d192f7e4e4fc7177fbc6b9bf5ee7d7809...HEAD \
+            > changed.txt
+
+          if grep -E '(^|/)(Allergies|DrugChart|AmendmentHistory|DraftIndicator)/' changed.txt; then
+            echo 'FAIL: unrelated upstream feature area entered Bundle-1'
+            exit 1
+          fi
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Test
+        run: yarn test:ci
