@@ -68,13 +68,13 @@ jobs:
           allowed="$(mktemp)"
           changed="$(mktemp)"
 
-          cat > "$allowed" <<'LIST'
-src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap
-src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap
-src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap
-src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap
-src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap
-LIST
+          printf '%s\n' \
+            'src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap' \
+            'src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap' \
+            'src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap' \
+            'src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap' \
+            'src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap' \
+            > "$allowed"
 
           git status --porcelain |
             sed 's/^...//' |
