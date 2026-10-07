@@ -18,7 +18,7 @@ const BAHMNI_CORE = RESTWS_V1 + "/bahmnicore";
 export const ADDRESS_HEIRARCHY =
   hostUrl +
   "/openmrs/module/addresshierarchy/ajax/getOrderedAddressHierarchyLevels.form";
-export const homePageUrl = "/bahmni/home/#/dashboard";
+export const homePageUrl = "/bahmni-v2/home/";
 
 export const MEDICATIONS_BASE_URL = RESTWS_V1 + "/ipd/schedule/type/medication";
 export const EDIT_MEDICATIONS_BASE_URL =
