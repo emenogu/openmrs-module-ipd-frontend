@@ -17,6 +17,7 @@ import { TimePicker24Hour, Title, TimePicker } from "bahmni-carbon-ui";
 import AdministeredMedicationList from "./AdministeredMedicationList";
 import {
   saveAdministeredMedication,
+  saveEmergencyMedication,
   isTimeWithinAdministeredWindow,
   disableDoneTogglePostNextTaskTime,
   updateNonMedicationTask,
@@ -120,14 +121,16 @@ const UpdateNursingTasks = (props) => {
   };
 
   const handlePrimaryButtonClick = async () => {
-    const administeredTasks = createAdministeredTasksPayload();
-    const response = await saveAdministeredMedication(administeredTasks);
+    const submittedTasks = createAdministeredTasksPayload();
+    const response = isPRNMedication
+      ? await saveEmergencyMedication(submittedTasks[0])
+      : await saveAdministeredMedication(submittedTasks);
     if (response.status === 200) {
-      Object.keys(tasks).forEach((key) => {
-        if (tasks[key].status === "not-done") {
+      submittedTasks.forEach((task) => {
+        if (task.status === "not-done") {
           handleAuditEvent("SKIP_SCHEDULED_MEDICATION_TASK");
         }
-        if (tasks[key].status === "completed") {
+        if (task.status === "completed") {
           handleAuditEvent("ADMINISTER_MEDICATION_TASK");
         }
       });
