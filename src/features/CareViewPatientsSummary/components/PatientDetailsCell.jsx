@@ -207,6 +207,7 @@ export const PatientDetailsCell = ({
               </div>
             </div>
           )}
+        </div>
         {isBookmarked && (
           <div>
             <FormattedMessage id={"NURSE"} defaultMessage={"Nurse"} />:{" "}
