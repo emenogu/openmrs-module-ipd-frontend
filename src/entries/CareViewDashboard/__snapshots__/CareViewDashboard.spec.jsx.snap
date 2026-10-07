@@ -882,7 +882,6 @@ exports[`CareViewDashboard should match the snapshot 1`] = `
                                 d="M29,30H3a1,1,0,0,1-.8872-1.4614l13-25a1,1,0,0,1,1.7744,0l13,25A1,1,0,0,1,29,30ZM4.6507,28H27.3493l.002-.0033L16.002,6.1714h-.004L4.6487,27.9967Z"
                               />
                             </svg>
-                             
                           </div>
                           <div
                             class="treatments-notification-span"
@@ -895,7 +894,7 @@ exports[`CareViewDashboard should match the snapshot 1`] = `
                                 data-testid="treatments-ipd-dashboard"
                                 href="/bahmni/clinical/#/default/patient/7278eb93-8c1d-4ef4-bcbf-4c6ee91365f7/dashboard/visit/ipd/626b822d-741e-4a86-95ff-636eea753c2c?source=careViewDashboard"
                               >
-                                Schedule Treatments
+                                Acknowledge
                               </a>
                             </div>
                           </div>
