@@ -57,5 +57,50 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Test
-        run: yarn test:ci
+      - name: Generate snapshot candidates
+        run: yarn test:ci -u
+
+      - name: Fail closed on snapshot candidate scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          allowed="$(mktemp)"
+          changed="$(mktemp)"
+
+          cat > "$allowed" <<'LIST'
+src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap
+src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap
+src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap
+src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap
+src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap
+LIST
+
+          git status --porcelain |
+            sed 's/^...//' |
+            sort -u > "$changed"
+
+          echo '=== SNAPSHOT CANDIDATE CHANGES ==='
+          cat "$changed"
+
+          test -s "$changed"
+
+          unexpected="$(comm -23 "$changed" <(sort -u "$allowed"))"
+          if [ -n "$unexpected" ]; then
+            echo 'FAIL: unexpected snapshot candidate changes'
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+
+          echo 'SNAPSHOT_CANDIDATE_SCOPE=PASS'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle1-frontend-snapshot-candidates
+          path: |
+            src/entries/CareViewDashboard/__snapshots__/CareViewDashboard.spec.jsx.snap
+            src/features/CareViewPatientsSummary/tests/__snapshots__/CareViewPatientsSummary.spec.jsx.snap
+            src/features/CareViewPatientsSummary/tests/__snapshots__/PatientDetailsCell.spec.jsx.snap
+            src/features/DisplayControls/NursingTasks/tests/__snapshots__/AddEmergencyTasks.spec.jsx.snap
+            src/features/DisplayControls/NursingTasks/tests/__snapshots__/TaskTile.spec.jsx.snap
+          if-no-files-found: error
