@@ -32,9 +32,12 @@ export const fetchCareInstructionsObs = async (visitUuid, conceptNames) => {
 };
 
 export const fetchTasksByObservationUuids = async (observationUuids) => {
-  if (!observationUuids || observationUuids.length === 0) return [];
+  const uniqueObservationUuids = [
+    ...new Set((observationUuids || []).filter(Boolean)),
+  ];
+  if (uniqueObservationUuids.length === 0) return [];
   try {
-    const url = `${FHIR_TASK_URL}?focus=${observationUuids
+    const url = `${FHIR_TASK_URL}?focus=${uniqueObservationUuids
       .map((uuid) => `Observation/${uuid}`)
       .join(",")}&_count=500`;
 
@@ -133,7 +136,7 @@ export const mapObservationsToInstructions = (observations, formConcepts) => {
       );
     }
 
-    result.push({
+    const mappedInstruction = {
       observationUuid: obs.uuid,
       orderUuid: obs.orderUuid ?? null,
       encounterUuid: obs.encounterUuid,
@@ -142,9 +145,13 @@ export const mapObservationsToInstructions = (observations, formConcepts) => {
       instructionType: obs.concept.name,
       instruction,
       providerName: obs.providers?.[0]?.name ?? "",
-      previousVersionUuid: obs.previousVersionUuid ?? null,
-      action: "",
-    });
+    };
+
+    if (obs.previousVersionUuid) {
+      mappedInstruction.previousVersionUuid = obs.previousVersionUuid;
+    }
+
+    result.push(mappedInstruction);
 
     return result;
   }, []);
