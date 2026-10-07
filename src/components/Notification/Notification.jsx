@@ -1,5 +1,5 @@
 import React from "react";
-import { useMemo } from "react";
+import { useMemo } from 'react';
 import PropTypes from "prop-types";
 import { NotificationCarbon } from "bahmni-carbon-ui";
 import { FormattedMessage } from "react-intl";
@@ -8,24 +8,16 @@ import "./Notification.scss";
 
 export default function Notification(props) {
   const { hostData, hostApi } = props;
-  const {
-    notificationKind,
-    messageId,
-    defaultMessage,
-    messageDuration = 2000,
-  } = hostData;
-  const getTitle = () => {
-    if (messageId) {
-      return (
-        <I18nProvider>
-          <FormattedMessage id={messageId} />
-        </I18nProvider>
-      );
-    }
-    return defaultMessage;
+  const { notificationKind, messageId, messageDuration = 2000 } = hostData;
+  const getMessage = (messageId) => {
+    return (
+      <I18nProvider>
+        <FormattedMessage id={messageId} />
+      </I18nProvider>
+    );
   };
-
-  const title = useMemo(() => getTitle(), [messageId, defaultMessage]);
+  
+  const title = useMemo(() => getMessage(messageId), [messageId]);
 
   return (
     <NotificationCarbon
@@ -47,7 +39,6 @@ Notification.propTypes = {
     notificationKind: PropTypes.string.isRequired,
     messageDuration: PropTypes.number,
     messageId: PropTypes.string,
-    defaultMessage: PropTypes.string,
   }),
   hostApi: PropTypes.shape({
     onClose: PropTypes.func,
