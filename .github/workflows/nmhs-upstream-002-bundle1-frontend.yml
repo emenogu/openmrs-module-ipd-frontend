@@ -42,11 +42,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          changed="$(mktemp)"
+
           git diff --name-only \
             beeb307d192f7e4e4fc7177fbc6b9bf5ee7d7809...HEAD \
-            > changed.txt
+            > "$changed"
 
-          if grep -E '(^|/)(Allergies|DrugChart|AmendmentHistory|DraftIndicator)/' changed.txt; then
+          if grep -E '(^|/)(Allergies|DrugChart|AmendmentHistory|DraftIndicator)/' "$changed"; then
             echo 'FAIL: unrelated upstream feature area entered Bundle-1'
             exit 1
           fi
