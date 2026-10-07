@@ -4,7 +4,6 @@ import {
   BookmarkAdd20,
   BookmarkFilled20,
   HospitalBed16,
-  ResultNew20,
   WarningAlt20,
 } from "@carbon/icons-react";
 import { Link } from "carbon-components-react";
@@ -121,23 +120,15 @@ export const PatientDetailsCell = ({
           <span>{person.gender}</span>)<span className={"separator"}>|</span>
           <span>{person.age}</span>
           <FormattedMessage id={"AGE_YEARS_LABEL"} defaultMessage={"yrs"} />
-          {(newTreatments > 0 || careInstructionsCount > 0) && (
-            <div
-              className="treatments-notification"
-              data-testid="new-notifications"
-            >
+          {(newTreatments > 0 || previousShiftPendingTasks.length > 0) && (
+            <div className="treatments-notification">
               <div className="warning_icon">
-                <ResultNew20 className={"result-new-icon-20"} />
+                <WarningAlt20 className={"warning-icon-20"} />
               </div>
               <div className="treatments-notification-span">
                 {newTreatments > 0 && (
-                  <div data-testid="new-medications-notification">
-                    &bull; {newTreatments + " "}
-                    <FormattedMessage
-                      id={"NEW_MEDICATIONS"}
-                      defaultMessage={"New Medication(s)"}
-                    />
-                    {": "}
+                  <div>
+                    &bull; {newTreatments + " New treatment(s): "}
                     <Link
                       href={getIPDPatientDashboardUrl(
                         patientDetails.uuid,
@@ -148,79 +139,74 @@ export const PatientDetailsCell = ({
                     >
                       <FormattedMessage
                         id={"SCHEDULE_TREATMENTS"}
-                        defaultMessage={"Schedule Medications"}
+                        defaultMessage={"Schedule Treatments"}
                       />
                     </Link>
                   </div>
                 )}
-                {careInstructionsCount > 0 && (
-                  <div data-testid="new-care-instructions-notification">
-                    <div>
-                      &bull; {careInstructionsCount + " "}
-                      <FormattedMessage
-                        id={"NEW_CARE_INSTRUCTIONS"}
-                        defaultMessage={"New Care Instruction(s)"}
-                      />
-                      {": "}
-                      <Link
-                        href={getIPDPatientDashboardUrl(
-                          patientDetails.uuid,
-                          visitDetails?.uuid,
-                          "careViewDashboard"
+                {previousShiftPendingTasks.length > 0 && (
+                  <div>
+                    &bull;{" Previous Pending: "}
+                    {previousShiftPendingTasks.map((task, index) => (
+                      <span key={task.taskId}>
+                        {index === previousShiftPendingTasks.length - 1 ? (
+                          <span>{task.taskName}</span>
+                        ) : (
+                          <span>{task.taskName + ", "}</span>
                         )}
-                        data-testid="care-instructions-ipd-dashboard"
-                      >
-                        <FormattedMessage
-                          id={"ACKNOWLEDGE_CARE_INSTRUCTIONS"}
-                          defaultMessage={"Acknowledge"}
-                        />
-                      </Link>
-                    </div>
-                    {previousShiftCareInstructionsCount > 0 && (
-                      <div
-                        className="care-instructions-previous-shift"
-                        data-testid="previous-shift-care-instructions-notification"
-                      >
-
-                        <FormattedMessage
-                          id={"PREVIOUS_SHIFT_CARE_INSTRUCTIONS"}
-                          defaultMessage={"(Includes {count} from Previous Shift)"}
-                          values={{ count: previousShiftCareInstructionsCount }}
-                        />
-                      </div>
-                    )}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           )}
-          {previousShiftPendingTasks.length > 0 && (
+
+          {careInstructionsCount > 0 && (
             <div
               className="treatments-notification"
-              data-testid="pending-tasks-notification"
+              data-testid="new-care-instructions-notification"
             >
               <div className="warning_icon">
                 <WarningAlt20 className={"warning-icon-20"} />
               </div>
               <div className="treatments-notification-span">
                 <div>
-                  &bull;{" "}
-                  {previousShiftPendingTasks.length +
-                    " Pending Nursing Tasks: "}
-                  {previousShiftPendingTasks.map((task, index) => (
-                    <span key={task.taskId}>
-                      {index === previousShiftPendingTasks.length - 1 ? (
-                        <span>{task.taskName}</span>
-                      ) : (
-                        <span>{task.taskName + ", "}</span>
-                      )}
-                    </span>
-                  ))}
+                  &bull; {careInstructionsCount + " "}
+                  <FormattedMessage
+                    id={"NEW_CARE_INSTRUCTIONS"}
+                    defaultMessage={"New Care Instruction(s)"}
+                  />
+                  {": "}
+                  <Link
+                    href={getIPDPatientDashboardUrl(
+                      patientDetails.uuid,
+                      visitDetails?.uuid,
+                      "careViewDashboard"
+                    )}
+                    data-testid="care-instructions-ipd-dashboard"
+                  >
+                    <FormattedMessage
+                      id={"ACKNOWLEDGE_CARE_INSTRUCTIONS"}
+                      defaultMessage={"Acknowledge"}
+                    />
+                  </Link>
                 </div>
+                {previousShiftCareInstructionsCount > 0 && (
+                  <div
+                    className="care-instructions-previous-shift"
+                    data-testid="previous-shift-care-instructions-notification"
+                  >
+                    <FormattedMessage
+                      id={"PREVIOUS_SHIFT_CARE_INSTRUCTIONS"}
+                      defaultMessage={"(Includes {count} from Previous Shift)"}
+                      values={{ count: previousShiftCareInstructionsCount }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
-        </div>
         {isBookmarked && (
           <div>
             <FormattedMessage id={"NURSE"} defaultMessage={"Nurse"} />:{" "}
