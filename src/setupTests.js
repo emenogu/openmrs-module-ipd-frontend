@@ -15,3 +15,10 @@ jest.mock("react-intl", () => {
     }),
   };
 });
+
+
+// jsdom on the pinned Node/Jest stack does not provide randomUUID.
+if (!global.crypto) global.crypto = {};
+if (!global.crypto.randomUUID) {
+  global.crypto.randomUUID = jest.fn(() => "00000000-0000-4000-8000-000000000000");
+}
