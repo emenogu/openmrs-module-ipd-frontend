@@ -1,0 +1,44 @@
+name: NMHS UPSTREAM-002 BUNDLE-1 rollback IPD frontend verification
+on:
+  push:
+    branches:
+      - upstream-002-bundle1-rollback-frontend-verify-v1
+    paths:
+      - .github/workflows/nmhs-upstream-002-bundle1-rollback-frontend-verify.yml
+permissions:
+  contents: read
+  packages: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      IMAGE: ghcr.io/emenogu/nmhs-modern-ipd@sha256:f3bb2cc4a1afebe169cebb94ce104c8af4d7031c9041aa1d002eced52c17aa5f
+      SOURCE_COMMIT: beeb307d192f7e4e4fc7177fbc6b9bf5ee7d7809
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and verify accepted pre-BUNDLE-1 IPD frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "$IMAGE"
+          docker image inspect "$IMAGE" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -Fx "$IMAGE"
+          docker run --rm --entrypoint sh "$IMAGE" -c 'test -s /usr/local/apache2/htdocs/ipd/remoteEntry.js'
+          {
+            echo "ROLLBACK_FRONTEND=$IMAGE"
+            echo "SOURCE_COMMIT=$SOURCE_COMMIT"
+            echo "ACCEPTED_PUBLICATION_RUN=37540791534"
+          } | tee rollback-frontend.provenance
+          echo ROLLBACK_FRONTEND_VERIFY=PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle1-rollback-frontend-verification
+          path: rollback-frontend.provenance
