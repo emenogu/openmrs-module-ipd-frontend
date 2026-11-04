@@ -93,16 +93,17 @@ export const updateDrugOrderList = (drugOrderList) => {
     };
     ipdDrugOrder.route = ipdDrugOrder.drugOrder.dosingInstructions.route;
     ipdDrugOrder.durationUnit = ipdDrugOrder.drugOrder.durationUnits;
-    const administrationInstructions = JSON.parse(
-      ipdDrugOrder.drugOrder.dosingInstructions.administrationInstructions
-    );
-    ipdDrugOrder.instructions = administrationInstructions.instructions
-      ? administrationInstructions.instructions
-      : "";
+    let administrationInstructions = null;
+    try {
+      if (ipdDrugOrder.drugOrder.dosingInstructions.administrationInstructions) {
+        administrationInstructions = JSON.parse(
+          ipdDrugOrder.drugOrder.dosingInstructions.administrationInstructions
+        );
+      }
+    } catch (e) {}
+    ipdDrugOrder.instructions = administrationInstructions?.instructions || "";
     ipdDrugOrder.additionalInstructions =
-      administrationInstructions.additionalInstructions
-        ? administrationInstructions.additionalInstructions
-        : "";
+      administrationInstructions?.additionalInstructions || "";
   });
   return drugOrderList;
 };
